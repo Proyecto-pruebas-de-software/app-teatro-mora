@@ -4,10 +4,11 @@ const bodyParser = require("body-parser");
 const app = express();
 const port = 3000;
 const db = require('./queries/queries_usuarios');
-const actores = require('./queries/actores');
-const eventos = require('./queries/eventos');
-const cola = require('./queries/cola');
-const mensajes = require('./queries/mensajes_foro');
+const actores = require('./queries/queries_actores');
+const eventos = require('./queries/queries_eventos');
+const cola = require('./queries/queries_colavirtual');
+const mensajes = require('./queries/queries_mensajesforo');
+const boletos = require('./queries/queries_boletos')
 
 app.use(bodyParser.json());
 app.use(
@@ -48,11 +49,11 @@ app.put("/eventos/:id", eventos.updateEvento);
 app.delete("/eventos/:id", eventos.deleteEvento);
 
 // Rutas boletos
-app.get("/boletos", eventos.getBoletos);
-app.get("/boletos/:id", eventos.getBoletoById);
-app.post("/boletos", eventos.createBoleto);
-app.put("/boletos/:id", eventos.updateBoleto);
-app.delete("/boletos/:id", eventos.deleteBoleto);
+app.get("/boletos", boletos.getBoletos);
+app.get("/boletos/:id", boletos.getBoletoById);
+app.post("/boletos", boletos.createBoleto);
+app.put("/boletos/:id", boletos.updateBoleto);
+app.delete("/boletos/:id", boletos.deleteBoleto);
 
 // Rutas cola virtual
 app.get("/cola", cola.getColaVirtual);
@@ -62,8 +63,8 @@ app.put("/cola/:id", cola.updateColaVirtual);
 app.delete("/cola/:id", cola.deleteColaVirtual);
 
 // Rutas mensajes en foro
-app.get("/mensajes", mensajes.getMensajes);
-app.get("/mensajes/:id", mensajes.getMensajeById);
-app.post("/mensajes", mensajes.createMensaje);
-app.put("/mensajes/:id", mensajes.updateMensaje);
-app.delete("/mensajes/:id", mensajes.deleteMensaje);
+app.get("/mensajes", mensajes.getMensajesForo);
+app.get("/mensajes/:id", mensajes.getMensajeForoById);
+app.post("/mensajes", mensajes.createMensajeForo);
+app.put("/mensajes/:id", mensajes.updateMensajeForo);
+app.delete("/mensajes/:id", mensajes.deleteMensajeForo);
