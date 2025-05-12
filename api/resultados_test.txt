@@ -1,0 +1,228 @@
+Rutas registradas para /usuarios:
+  GET /usuarios
+  GET /usuarios/:id
+  POST /usuarios
+  PUT /usuarios/:id
+  DELETE /usuarios/:id
+Rutas registradas para /actores:
+  GET /actores
+  GET /actores/:id
+  POST /actores
+  PUT /actores/:id
+  DELETE /actores/:id
+Rutas registradas para /eventos:
+  GET /eventos
+  GET /eventos/:id
+  POST /eventos
+  PUT /eventos/:id
+  DELETE /eventos/:id
+Rutas registradas para /cola:
+  GET /cola
+  GET /cola/:id
+  POST /cola
+  PUT /cola/:id
+  DELETE /cola/:id
+Rutas registradas para /mensajes:
+  GET /mensajes
+  GET /mensajes/:id
+  POST /mensajes
+  PUT /mensajes/:id
+  DELETE /mensajes/:id
+Rutas registradas para /boletos:
+  GET /boletos
+  GET /boletos/:id
+  POST /boletos
+  PUT /boletos/:id
+  DELETE /boletos/:id
+
+
+  API CRUD de Actores
+    Validaciones
+      √ Debería validar nombres correctamente
+      √ Debería validar biografías correctamente
+      √ Debería validar URLs de foto correctamente
+    POST /actores
+      √ Debería crear un nuevo actor con datos válidos (201) (59ms)
+      √ Debería crear actor sin biografía ni foto (201)
+      √ Debería rechazar actor sin nombre (400)
+      √ Debería rechazar nombre con caracteres inválidos (400)
+      √ Debería rechazar URL de foto inválida (400)
+      √ Debería rechazar actor con nombre duplicado (409)
+    GET /actores
+      √ Debería listar todos los actores ordenados por nombre (200)
+      √ Debería obtener un actor específico por ID (200)
+      √ Debería fallar con ID inexistente (404)
+      √ Debería fallar con ID inválido (400)
+    PUT /actores/:id
+      √ Debería actualizar solo el nombre (200)
+      √ Debería actualizar solo la biografía (200)
+      √ Debería rechazar actualización con ID inexistente (404)
+      √ Debería rechazar actualización con ID inválido (400)
+      √ Debería rechazar actualización con nombre existente (409)
+    DELETE /actores/:id
+      √ Debería eliminar un actor existente (200)
+      √ Debería fallar al eliminar actor inexistente (404)
+      √ Debería fallar al eliminar con ID inválido (400)
+
+  API CRUD de Boletos
+    POST /boletos
+      √ Debería crear un nuevo boleto con datos válidos (201) (163ms)
+      √ Debería rechazar boleto sin datos requeridos (400)
+      √ Debería rechazar asiento con formato inválido (400)
+      √ Debería rechazar asiento ya ocupado (409)
+      √ Debería crear boleto sin turno_numero (201)
+    GET /boletos
+      √ Debería listar todos los boletos (200)
+      √ Debería obtener un boleto específico por ID (200)
+      √ Debería fallar con ID inexistente (404)
+    PUT /boletos/:id
+      √ Debería actualizar el estado de uso de un boleto (200)
+      √ Debería actualizar el asiento de un boleto (200)
+      √ Debería rechazar actualización con asiento inválido (400)
+      √ Debería rechazar actualización con asiento ocupado (409)
+      √ Debería rechazar actualización con usuario/evento inexistente (404)
+    DELETE /boletos/:id
+      √ Debería eliminar un boleto existente (200)
+      √ Debería fallar al eliminar boleto inexistente (404)
+    Validaciones adicionales
+      √ Debería rechazar turno_numero no entero (400)
+      √ Debería aceptar boleto con fue_usado=true (201)
+
+  API CRUD de Cola Virtual
+    POST /cola
+      √ Debería crear un nuevo registro en cola con datos válidos (201) (66ms)
+      √ Debería rechazar registro sin datos requeridos (400)
+      1) Debería rechazar turno_numero no positivo (400)
+      √ Debería rechazar turno_numero no entero (400)
+      √ Debería rechazar turno_numero duplicado para mismo evento (409)
+      2) Debería permitir turno_numero duplicado para diferente evento (201)
+    GET /cola
+      √ Debería listar todos los registros de cola (200)
+      √ Debería obtener un registro específico por ID (200)
+      √ Debería fallar con ID inexistente (404)
+    PUT /cola/:id
+      √ Debería actualizar el estado en_turno (200)
+      √ Debería actualizar el turno_numero (200)
+      √ Debería rechazar actualización con turno_numero inválido (400)
+      √ Debería rechazar actualización con en_turno no booleano (400)
+      √ Debería rechazar actualización con usuario/evento inexistente (404)
+    DELETE /cola/:id
+      √ Debería eliminar un registro existente (200)
+      √ Debería fallar al eliminar registro inexistente (404)
+    Validaciones adicionales
+      √ Debería ordenar los registros por turno_numero ASC (91ms)
+      √ Debería crear registro con en_turno=true (201)
+
+  API CRUD de Eventos
+    POST /eventos
+      √ Debería crear un nuevo evento con datos válidos (201) (60ms)
+      √ Debería crear evento sin descripción ni creador (201)
+      √ Debería rechazar evento sin nombre (400)
+      √ Debería rechazar nombre con caracteres inválidos (400)
+      √ Debería rechazar fecha pasada (400)
+      √ Debería rechazar nombre duplicado en misma fecha (409)
+      √ Debería rechazar creador inexistente (404)
+    GET /eventos
+      √ Debería listar todos los eventos ordenados por fecha (200)
+      √ Debería obtener un evento específico por ID (200)
+      √ Debería fallar con ID inexistente (404)
+    PUT /eventos/:id
+      √ Debería actualizar nombre y descripción (200)
+      3) Debería actualizar solo la fecha (200)
+      √ Debería rechazar actualización con fecha pasada (400)
+      √ Debería rechazar actualización con nombre duplicado en misma fecha (409)
+      √ Debería permitir actualización parcial (200)
+    DELETE /eventos/:id
+      √ Debería eliminar un evento sin boletos asociados (200)
+      √ Debería rechazar eliminación de evento con boletos asociados (403)
+      √ Debería fallar al eliminar evento inexistente (404)
+    Validaciones adicionales
+      √ Debería manejar descripción con exactamente 2000 caracteres (201)
+      √ Debería rechazar descripción con más de 2000 caracteres (400)
+      √ Debería mostrar 0 boletos vendidos para evento nuevo (200)
+
+  API CRUD de Mensajes del Foro
+    POST /mensajes
+      √ Debería crear un nuevo mensaje con datos válidos (201) (159ms)
+      √ Debería rechazar mensaje sin datos requeridos (400)
+      √ Debería rechazar mensaje demasiado corto (4 caracteres) (400)
+      √ Debería rechazar mensaje demasiado largo (501 caracteres) (400)
+      √ Debería rechazar mensaje con usuario inexistente (404)
+      √ Debería rechazar mensaje con evento inexistente (404)
+    GET /mensajes
+      √ Debería listar todos los mensajes ordenados por fecha descendente (200) (73ms)
+      √ Debería obtener un mensaje específico por ID (200)
+      √ Debería fallar con ID inexistente (404)
+    PUT /mensajes/:id
+      √ Debería actualizar el texto del mensaje (200)
+      √ Debería rechazar actualización con mensaje demasiado corto (400)
+      √ Debería rechazar actualización con mensaje demasiado largo (400)
+      √ Debería rechazar actualización de mensaje inexistente (404)
+      √ Debería ignorar intento de cambiar usuario o evento (200)
+    DELETE /mensajes/:id
+      √ Debería eliminar un mensaje existente (200)
+      √ Debería fallar al eliminar mensaje inexistente (404)
+    Validaciones adicionales
+      √ Debería aceptar mensaje con exactamente 5 caracteres (201)
+      √ Debería aceptar mensaje con exactamente 500 caracteres (201)
+      √ Debería mantener la fecha original al actualizar (200)
+
+  API CRUD de Usuarios
+    POST /usuarios
+      √ Debería crear un nuevo usuario con datos válidos (201) (59ms)
+      √ Debería rechazar usuario sin nombre (400)
+      √ Debería rechazar email inválido (400)
+      √ Debería rechazar contraseña insegura (400)
+      √ Debería rechazar email duplicado (409)
+    GET /usuarios
+      √ Debería listar todos los usuarios (200)
+      √ Debería obtener un usuario específico por ID (200)
+      √ Debería fallar con ID inexistente (404)
+    PUT /usuarios/:id
+      √ Debería actualizar un usuario (200)
+      √ Debería rechazar actualización con email inválido (400)
+      √ Debería rechazar actualización con email duplicado (409)
+    DELETE /usuarios/:id
+      √ Debería eliminar un usuario existente (200)
+      √ Debería fallar al eliminar usuario inexistente (404)
+      √ Debería rechazar eliminación si tiene boletos asociados (403)
+    Validaciones adicionales
+      √ Debería crear usuario con rol por defecto (cliente) si no se especifica (201)
+      √ Debería aceptar nombre con caracteres especiales (áéíóúñ) (201)
+
+
+  109 passing (2s)
+  3 failing
+
+  1) API CRUD de Cola Virtual
+       POST /cola
+         Debería rechazar turno_numero no positivo (400):
+     AssertionError: expected 'Faltan campos requeridos: usuario_id,…' to include 'Número de turno inválido'
+      at Context.<anonymous> (tests\colavirtual.test.js:90:41)
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+
+  2) API CRUD de Cola Virtual
+       POST /cola
+         Debería permitir turno_numero duplicado para diferente evento (201):
+
+      AssertionError: expected Response{ _events: {}, …(34), …(2) } to have status code 201 but got 404
+      + expected - actual
+
+      -404
+      +201
+
+      at Context.<anonymous> (tests\colavirtual.test.js:131:33)
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+
+  3) API CRUD de Eventos
+       PUT /eventos/:id
+         Debería actualizar solo la fecha (200):
+
+      AssertionError: expected '2025-05-15T04:00:00.000Z' to equal '2025-05-15T23:11:17.830Z'
+      + expected - actual
+
+      -2025-05-15T04:00:00.000Z
+      +2025-05-15T23:11:17.830Z
+
+      at Context.<anonymous> (tests\eventos.test.js:214:44)
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
