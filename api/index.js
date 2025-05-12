@@ -1,70 +1,124 @@
 const express = require("express");
 const bodyParser = require("body-parser");
+const helmet = require("helmet"); 
+const rateLimit = require("express-rate-limit");
 
 const app = express();
-const port = 3000;
-const db = require('./queries/queries_usuarios');
-const actores = require('./queries/queries_actores');
-const eventos = require('./queries/queries_eventos');
-const cola = require('./queries/queries_colavirtual');
-const mensajes = require('./queries/queries_mensajesforo');
-const boletos = require('./queries/queries_boletos')
+const port = process.env.PORT || 3000;
 
-app.use(bodyParser.json());
-app.use(
-    bodyParser.urlencoded({
-        extended: true
-    })
-)
+// Configuración básica para testing
+const isTestEnvironment = process.env.NODE_ENV === 'test';
 
-app.listen(port, () => {
-    console.log("Server is running on " + port);
+// Configuración de rate limiting (deshabilitado para testing)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isTestEnvironment ? 0 : 100 // Desactiva límite en tests
 });
 
-app.get("/", (request, response) => {
-    response.json({
-        info: 'Hello world!'
+// Middlewares (solo los esenciales para testing)
+app.use(bodyParser.json({ limit: '10kb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10kb' }));
+
+if (!isTestEnvironment) {
+  app.use(helmet());
+  app.use(limiter);
+}
+
+// Health Check simplificado
+app.get("/", (req, res) => {
+  res.json({
+    status: "active",
+    message: "API del Teatro Mora",
+    version: "1.0.0"
+  });
+});
+
+// Cargar rutas (siempre, incluyendo testing)
+const routes = {
+  usuarios: require('./queries/queries_usuarios'),
+  actores: require('./queries/queries_actores'),
+  eventos: require('./queries/queries_eventos'),
+  cola: require('./queries/queries_colavirtual'),
+  mensajes: require('./queries/queries_mensajesforo'),
+  boletos: require('./queries/queries_boletos')
+};
+
+const setupRoutes = (app, prefix, router) => {
+  if (!router) return;
+  
+  // Verificación de métodos antes de asignar rutas
+  if (router.getAll) app.get(`/${prefix}`, router.getAll);
+  if (router.getById) app.get(`/${prefix}/:id`, router.getById);
+  if (router.create) app.post(`/${prefix}`, router.create);
+  if (router.update) app.put(`/${prefix}/:id`, router.update);
+  if (router.delete) app.delete(`/${prefix}/:id`, router.delete);
+  
+  // Para debugging - verifica que las rutas se registren
+  if (isTestEnvironment) {
+    console.log(`Rutas registradas para /${prefix}:`);
+    if (router.getAll) console.log(`  GET /${prefix}`);
+    if (router.getById) console.log(`  GET /${prefix}/:id`);
+    if (router.create) console.log(`  POST /${prefix}`);
+    if (router.update) console.log(`  PUT /${prefix}/:id`);
+    if (router.delete) console.log(`  DELETE /${prefix}/:id`);
+  }
+};
+
+// Asignación segura de rutas
+Object.entries(routes).forEach(([name, router]) => {
+  if (router) setupRoutes(app, name, router);
+});
+
+// Manejador de errores mejorado
+app.use((err, req, res, next) => {
+  if (!isTestEnvironment) {
+    console.error(err.stack);
+  }
+  res.status(err.status || 500).json({
+    status: false,
+    code: err.status || 500,
+    message: err.message || 'Error interno del servidor',
+    error: isTestEnvironment ? undefined : err.stack
+  });
+});
+
+// Ruta 404 (personalizada para testing)
+app.use((req, res) => {
+  const message = isTestEnvironment 
+    ? `Ruta no encontrada: ${req.method} ${req.originalUrl}`
+    : 'Ruta no encontrada';
+  
+  res.status(404).json({
+    status: false,
+    code: 404,
+    message: message
+  });
+});
+
+// Iniciar servidor solo si no es testing
+if (!isTestEnvironment) {
+  const server = app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+
+  // Manejo adecuado de cierre
+  process.on('SIGTERM', () => {
+    server.close(() => {
+      console.log('Server closed');
     });
-})
+  });
+}
 
-//Rutas usuarios
-app.get("/usuarios", db.getUsuarios);
-app.get("/usuarios/:id", db.getUsuarioById);
-app.put("/usuarios/:id", db.updateUsuario);
-app.post("/usuarios", db.createUsuario);
-app.delete("/usuarios/:id", db.deleteUsuario);
+// Para testing, agregamos un método para cerrar conexiones
+if (isTestEnvironment) {
+  app.close = async () => {
+    // Cierra conexiones a la base de datos si es necesario
+    if (routes.actores && routes.actores.pool) {
+      await routes.actores.pool.end();
+    }
+    // Agrega cierre para otros pools si existen
+  };
+}
 
-//Rutas actores
-app.get("/actores", actores.getActores);
-app.get("/actores/:id", actores.getActorById);
-app.post("/actores", actores.createActor);
-app.put("/actores/:id", actores.updateActor);
-app.delete("/actores/:id", actores.deleteActor);
-
-//Rutas eventos
-app.get("/eventos", eventos.getEventos);
-app.get("/eventos/:id", eventos.getEventoById);
-app.post("/eventos", eventos.createEvento);
-app.put("/eventos/:id", eventos.updateEvento);
-app.delete("/eventos/:id", eventos.deleteEvento);
-
-// Rutas boletos
-app.get("/boletos", boletos.getBoletos);
-app.get("/boletos/:id", boletos.getBoletoById);
-app.post("/boletos", boletos.createBoleto);
-app.put("/boletos/:id", boletos.updateBoleto);
-app.delete("/boletos/:id", boletos.deleteBoleto);
-
-// Rutas cola virtual
-app.get("/cola", cola.getColaVirtual);
-app.get("/cola/:id", cola.getColaVirtualById);
-app.post("/cola", cola.createColaVirtual);
-app.put("/cola/:id", cola.updateColaVirtual);
-app.delete("/cola/:id", cola.deleteColaVirtual);
-
-// Rutas mensajes en foro
-app.get("/mensajes", mensajes.getMensajesForo);
-app.get("/mensajes/:id", mensajes.getMensajeForoById);
-app.post("/mensajes", mensajes.createMensajeForo);
-app.put("/mensajes/:id", mensajes.updateMensajeForo);
-app.delete("/mensajes/:id", mensajes.deleteMensajeForo);
+module.exports = app;
