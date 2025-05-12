@@ -1,18 +1,25 @@
 {
   "name": "api",
   "version": "1.0.0",
-  "description": "",
+  "description": "API para administración de teatro - Configuración mínima para testing",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha tests/**/*.test.js --timeout 10000 --colors",
+    "test:watch": "mocha --watch tests/**/*.test.js --colors"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "dan": "^0.0.1",
     "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
     "pg": "^8.15.6"
+  },
+  "devDependencies": {
+    "chai": "^4.3.7",
+    "chai-http": "^4.3.0",
+    "mocha": "^10.2.0",
+    "sinon": "^17.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
