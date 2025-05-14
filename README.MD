@@ -44,6 +44,7 @@ API para la gestión de eventos, actores, usuarios y boletos del Teatro Mora Vir
 3. Configurar base de datos PostgreSQL:
    - Crear base de datos `teatro_mora_virtual`
    - Configurar credenciales en los archivos de queries (o usar variables de entorno)
+   - Cargar tablas predefenidas a la BD("TABLAS TEATRO.txt")
 
 4. Iniciar servidor:
    ```bash
@@ -81,11 +82,15 @@ API para la gestión de eventos, actores, usuarios y boletos del Teatro Mora Vir
 - `PUT /eventos/:id` - Actualizar evento
 - `DELETE /eventos/:id` - Eliminar evento
 
-## Pruebas (En progreso)
-Próximamente: Pruebas unitarias e integración con Mocha + Chai.
+## Testing
+Pruebas unitarias y de integración, con Mocha + Chai.
+Iniciar tests:
 ```bash
 npm test
 ```
+Se mostraran en consola el resultado de un total de 112 
+tests centrados en cada request de caso general como de casos limites
+para cada modulo CRUD.
 
 ## Despliegue (Futuro)
 Planeado para AWS EC2 + RDS. Consultar con el equipo.
