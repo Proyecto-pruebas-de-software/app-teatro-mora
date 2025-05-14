@@ -16,7 +16,7 @@ API para la gestión de eventos, actores, usuarios y boletos del Teatro Mora Vir
 .
 ├── models/
 │   └── response.js       # Modelo estandarizado para respuestas API
-
+│
 ├── queries/
 │   ├── actores.js        # CRUD de actores
 │   ├── boletos.js        # CRUD de boletos
@@ -24,6 +24,15 @@ API para la gestión de eventos, actores, usuarios y boletos del Teatro Mora Vir
 │   ├── eventos.js        # CRUD de eventos
 │   ├── mensajes_foro.js  # Foro de mensajes
 │   └── usuarios.js       # CRUD de usuarios
+│
+├── tests/         
+│   ├── actores.test.js    # Archivo test para actores
+│   ├── boletos.test.js    # Archivo test para boletos
+│   ├── colavirtual.test.js # Archivo test para cola virtual
+│   ├── eventos.test.js     # Archivo test para eventos
+│   ├── mensajesforo.test.js # Archivo test para mensajes de foro
+│   └── usuarios.test.js    # Archivo test para usuarios
+│
 ├── index.js              # Punto de entrada (configuración del servidor)
 └── package.json          # Dependencias y scripts
 ```
@@ -89,7 +98,7 @@ Iniciar tests:
 npm test
 ```
 Se mostraran en consola el resultado de un total de 112 
-tests centrados en cada request de caso general como de casos limites
+tests centrados en cada request de caso general y de casos limites
 para cada modulo CRUD.
 
 ## Despliegue (Futuro)
