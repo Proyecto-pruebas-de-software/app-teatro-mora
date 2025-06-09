@@ -2,6 +2,8 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const helmet = require("helmet"); 
 const rateLimit = require("express-rate-limit");
+const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -15,14 +17,11 @@ const limiter = rateLimit({
   max: isTestEnvironment ? 0 : 100 // Desactiva límite en tests
 });
 
-// Middlewares (solo los esenciales para testing)
+// Middlewares
+app.use(cors());
 app.use(bodyParser.json({ limit: '10kb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '10kb' }));
-
-if (!isTestEnvironment) {
   app.use(helmet());
   app.use(limiter);
-}
 
 // Health Check simplificado
 app.get("/", (req, res) => {
@@ -33,34 +32,44 @@ app.get("/", (req, res) => {
   });
 });
 
-// Cargar rutas (siempre, incluyendo testing)
+// Cargar rutas
 const routes = {
+  auth: require('./routes/auth'),
+  eventos: require('./routes/eventos'),
   usuarios: require('./queries/queries_usuarios'),
   actores: require('./queries/queries_actores'),
-  eventos: require('./queries/queries_eventos'),
   cola: require('./queries/queries_colavirtual'),
-  mensajes: require('./queries/queries_mensajesforo'),
+  mensajes: require('./routes/mensajes'),
   boletos: require('./queries/queries_boletos')
 };
 
+// Configurar rutas
+app.use('/api/auth', routes.auth);
+app.use('/api/eventos', routes.eventos);
+app.use('/api/usuarios', routes.usuarios);
+app.use('/api/actores', routes.actores);
+app.use('/api/cola', routes.cola);
+app.use('/api/mensajes', routes.mensajes);
+app.use('/api/boletos', routes.boletos);
+
 const setupRoutes = (app, prefix, router) => {
-  if (!router) return;
+  if (!router || prefix === 'auth') return;
   
   // Verificación de métodos antes de asignar rutas
-  if (router.getAll) app.get(`/${prefix}`, router.getAll);
-  if (router.getById) app.get(`/${prefix}/:id`, router.getById);
-  if (router.create) app.post(`/${prefix}`, router.create);
-  if (router.update) app.put(`/${prefix}/:id`, router.update);
-  if (router.delete) app.delete(`/${prefix}/:id`, router.delete);
+  if (router.getAll) app.get(`/api/${prefix}`, router.getAll);
+  if (router.getById) app.get(`/api/${prefix}/:id`, router.getById);
+  if (router.create) app.post(`/api/${prefix}`, router.create);
+  if (router.update) app.put(`/api/${prefix}/:id`, router.update);
+  if (router.delete) app.delete(`/api/${prefix}/:id`, router.delete);
   
   // Para debugging - verifica que las rutas se registren
   if (isTestEnvironment) {
-    console.log(`Rutas registradas para /${prefix}:`);
-    if (router.getAll) console.log(`  GET /${prefix}`);
-    if (router.getById) console.log(`  GET /${prefix}/:id`);
-    if (router.create) console.log(`  POST /${prefix}`);
-    if (router.update) console.log(`  PUT /${prefix}/:id`);
-    if (router.delete) console.log(`  DELETE /${prefix}/:id`);
+    console.log(`Rutas registradas para /api/${prefix}:`);
+    if (router.getAll) console.log(`  GET /api/${prefix}`);
+    if (router.getById) console.log(`  GET /api/${prefix}/:id`);
+    if (router.create) console.log(`  POST /api/${prefix}`);
+    if (router.update) console.log(`  PUT /api/${prefix}/:id`);
+    if (router.delete) console.log(`  DELETE /api/${prefix}/:id`);
   }
 };
 
@@ -69,29 +78,21 @@ Object.entries(routes).forEach(([name, router]) => {
   if (router) setupRoutes(app, name, router);
 });
 
-// Manejador de errores mejorado
+// Error handling
 app.use((err, req, res, next) => {
-  if (!isTestEnvironment) {
     console.error(err.stack);
-  }
-  res.status(err.status || 500).json({
+  res.status(500).json({
     status: false,
-    code: err.status || 500,
-    message: err.message || 'Error interno del servidor',
-    error: isTestEnvironment ? undefined : err.stack
+    message: 'Something went wrong!',
+    error: isTestEnvironment ? err.message : 'Internal server error'
   });
 });
 
-// Ruta 404 (personalizada para testing)
+// 404 handler
 app.use((req, res) => {
-  const message = isTestEnvironment 
-    ? `Ruta no encontrada: ${req.method} ${req.originalUrl}`
-    : 'Ruta no encontrada';
-  
   res.status(404).json({
     status: false,
-    code: 404,
-    message: message
+    message: 'Route not found'
   });
 });
 

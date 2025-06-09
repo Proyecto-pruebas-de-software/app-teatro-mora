@@ -3,11 +3,11 @@ const Response = require("../models/response");
 
 // Configuración de la conexión a PostgreSQL
 const pool = new Pool({
-    user: 'postgres',
-    host: 'localhost',
-    database: 'teatro_mora_virtual',
-    password: 'vicente',
-    port: 5432,
+    user: process.env.DB_USER,
+    host: process.env.DB_HOST,
+    database: process.env.DB_NAME,
+    password: process.env.DB_PASSWORD,
+    port: process.env.DB_PORT,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000
 });
@@ -68,18 +68,30 @@ const getEventos = async (req, res) => {
     const response = new Response();
     try {
         const query = `
-            SELECT e.id, e.nombre, e.descripcion, e.fecha, 
-                   e.creada_por, u.nombre as creador_nombre,
-                   COUNT(b.id) as boletos_vendidos
+            SELECT 
+                e.id, 
+                e.nombre, 
+                e.descripcion, 
+                e.fecha,
+                e.hora,
+                e.precio,
+                e.aforo,
+                COALESCE(e.vendidos, 0) as vendidos,
+                e.imagen_url,
+                e.venta_inicio,
+                e.creada_por, 
+                u.nombre as creador_nombre
             FROM eventos e
             LEFT JOIN usuarios u ON e.creada_por = u.id
-            LEFT JOIN boletos b ON e.id = b.evento_id
-            GROUP BY e.id, u.nombre
             ORDER BY e.fecha ASC
         `;
         const results = await pool.query(query);
         
-        return res.status(200).json(response.success(200, "Eventos obtenidos exitosamente", results.rows));
+        return res.status(200).json({
+            status: true,
+            message: "Eventos obtenidos exitosamente",
+            data: results.rows
+        });
     } catch (error) {
         console.error('Error en getEventos:', error);
         return res.status(500).json(response.failure(500, "Error al obtener eventos"));
@@ -96,8 +108,19 @@ const getEventoById = async (req, res) => {
 
     try {
         const query = `
-            SELECT e.id, e.nombre, e.descripcion, e.fecha, 
-                   e.creada_por, u.nombre as creador_nombre
+            SELECT 
+                e.id, 
+                e.nombre, 
+                e.descripcion, 
+                e.fecha,
+                e.hora,
+                e.precio,
+                e.aforo,
+                COALESCE(e.vendidos, 0) as vendidos,
+                e.imagen_url,
+                e.venta_inicio,
+                e.creada_por, 
+                u.nombre as creador_nombre
             FROM eventos e
             LEFT JOIN usuarios u ON e.creada_por = u.id
             WHERE e.id = $1
@@ -108,7 +131,11 @@ const getEventoById = async (req, res) => {
             return res.status(404).json(response.failure(404, "Evento no encontrado"));
         }
 
-        return res.status(200).json(response.success(200, "Evento obtenido exitosamente", results.rows[0]));
+        return res.status(200).json({
+            status: true,
+            message: "Evento obtenido exitosamente",
+            data: results.rows[0]
+        });
     } catch (error) {
         console.error('Error en getEventoById:', error);
         return res.status(500).json(response.failure(500, "Error al obtener el evento"));
