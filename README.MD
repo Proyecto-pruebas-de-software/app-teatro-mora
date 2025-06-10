@@ -16,8 +16,11 @@
   - [Endpoints Disponibles](#endpoints-disponibles)
     - [Usuarios](#usuarios)
     - [Actores](#actores)
+    - [Mensajes del Foro](#mensajes-del-foro)
     - [Boletos](#boletos)
+    - [Cola Virtual](#cola-virtual)
     - [Eventos](#eventos)
+    - [Autenticación](#autenticación)
   - [Testing](#testing)
   - [Despliegue (Futuro)](#despliegue-futuro)
   - [Contribución](#contribución)
@@ -32,6 +35,7 @@
 -   **`pg`**: Cliente PostgreSQL para Node.js.
 -   **`bcryptjs`**: Librería para el hashing de contraseñas.
 -   **`jsonwebtoken` (JWT)**: Para la autenticación basada en tokens.
+-   **`dotenv`**: Para la gestión de variables de entorno.
 
 **Frontend:**
 -   **React**: Librería de JavaScript para construir interfaces de usuario.
@@ -46,20 +50,21 @@
 
 ## Características Principales
 
-*   **Gestión de Usuarios**: Registro, inicio de sesión y perfiles de usuario (clientes y administradores).
+*   **Gestión de Usuarios**: Registro, inicio de sesión, perfiles de usuario (clientes y administradores) y hashing de contraseñas para mayor seguridad.
 *   **Gestión de Eventos**:
-    *   Visualización de eventos próximos y pasados.
+    *   Visualización de eventos próximos y pasados, incluyendo detalles como hora, precio, aforo, y URL de imagen.
     *   Funcionalidad para crear, editar y eliminar eventos (solo administradores).
     *   Filtrado y ordenamiento de eventos por nombre, fecha y precio (ascendente/descendente).
 *   **Foro de la Comunidad**:
-    *   Publicación de mensajes asociados a eventos.
-    *   Visualización de mensajes con detalles de usuario, fecha y contenido.
-    *   Edición y eliminación de mensajes (por el autor o administradores).
-    *   Reporte de mensajes.
+    *   Publicación de mensajes asociados a eventos, con soporte para respuestas a mensajes existentes (foro anidado).
+    *   Visualización de mensajes con detalles de autor, fecha, contenido, **conteo de respuestas y fecha de última actividad**.
+    *   **Control de acceso granular para mensajes**: los usuarios solo pueden editar/eliminar sus propios mensajes y reportar otros. Los administradores tienen control total.
+    *   Validación en frontend para mensajes (mínimo de 5 caracteres).
 *   **Gestión de Actores**: Visualización y gestión de la información de los actores del teatro (solo administradores pueden crear, editar, eliminar).
-*   **Boletos y Cola Virtual**: (Funcionalidades existentes, pueden requerir más desarrollo de UI/UX)
-    *   Sistema básico de compra de boletos.
-    *   Gestión de cola virtual para eventos.
+*   **Boletos y Cola Virtual**:
+    *   Sistema robusto de **compra de boletos**, incluyendo gestión de aforo y validación de asientos.
+    *   **Gestión completa de cola virtual** para eventos, permitiendo a los usuarios unirse, verificar su estado en la cola, y ser notificados de su turno.
+    *   Integración con la UI para la navegación fácil de regreso al evento desde la página de la cola.
 *   **Interfaz de Usuario Responsiva**: Diseño adaptado a diferentes tamaños de pantalla utilizando Material-UI.
 
 ## Estructura del Proyecto
@@ -82,6 +87,8 @@ El proyecto está dividido en dos directorios principales: `api/` para el backen
 │   ├── components/       # Componentes React reutilizables (botones, tarjetas, etc.)
 │   ├── context/          # Contextos de React para la gestión de estado global (e.g., AuthContext)
 │   ├── pages/            # Componentes React de las páginas principales (vistas)
+│   │   ├── Foro.jsx      # Página principal del foro, muestra categorías de eventos
+│   │   └── EventForumPage.jsx # Página de un foro de evento específico (temas y respuestas)
 │   ├── main.jsx          # Punto de entrada principal de la aplicación React
 │   └── App.jsx           # Componente principal de la aplicación
 │   └── theme.js          # Configuración del tema de Material-UI
@@ -114,13 +121,13 @@ Asegúrate de tener instalado lo siguiente:
     ```
 
 2.  **Configuración de la Base de Datos:**
-    *   **Crear base de datos:** Abre pgAdmin 4 o tu cliente PostgreSQL y crea una nueva base de datos llamada `teatro_mora`.
+    *   **Crear base de datos:** Abre pgAdmin 4 o tu cliente PostgreSQL y crea una nueva base de datos llamada `teatro_mora_virtual`.
     *   **Crear archivo `.env`:** En el directorio `api/`, crea un archivo llamado `.env` y añade el siguiente contenido, reemplazando los valores con tus credenciales de PostgreSQL y una clave secreta fuerte:
         ```
         # Database Configuration
         DB_USER=postgres
         DB_HOST=localhost
-        DB_NAME=teatro_mora
+        DB_NAME=teatro_mora_virtual
         DB_PASSWORD=tu_contraseña_postgresql
         DB_PORT=5432
 
@@ -135,7 +142,7 @@ Asegúrate de tener instalado lo siguiente:
     *   **Ejecutar esquema y datos de prueba:** Navega al directorio `api/` y ejecuta el script SQL para crear las tablas y poblar datos de prueba:
         ```bash
         cd api
-        psql -U postgres -d teatro_mora -f database/full_init.sql
+        psql -U postgres -d teatro_mora_virtual -f database/full_init.sql
         ```
         (Reemplaza `postgres` con tu usuario de PostgreSQL si es diferente).
 
@@ -166,26 +173,26 @@ Asegúrate de tener instalado lo siguiente:
     ```bash
     npm run dev
     ```
-    El frontend se ejecutará en `http://localhost:5173` (o un puerto similar, según Vite).
+    El frontend se ejecutará en `http://localhost:3001` (o un puerto similar, según Vite).
 
 ## Uso de la Aplicación
 
 Una vez que ambos servidores (backend y frontend) estén en funcionamiento:
-1.  Abre tu navegador y navega a la URL del frontend (ej: `http://localhost:5173`).
-2.  Puedes registrarte como un nuevo usuario o usar las credenciales de prueba predefinidas en `database/seed.sql` (ej: `admin@example.com` / `Admin123!`).
+1.  Abre tu navegador y navega a la URL del frontend (ej: `http://localhost:3001`).
+2.  Puedes registrarte como un nuevo usuario o usar las credenciales de prueba predefinidas en `database/full_init.sql` (ej: `admin@example.com` / `Admin123!`).
 3.  Explora las secciones de Eventos, Foro, Actores, etc.
 
 ## Consideraciones y Mejoras Futuras
 
-Aunque el proyecto está bien estructurado y funcional, aquí hay algunas áreas para futuras mejoras:
+Aunque el proyecto ha avanzado significativamente y es funcional, aquí hay algunas áreas para futuras mejoras y consideraciones:
 
-*   **Refactorización de Autenticación**: Mover la lógica de base de datos de `api/routes/auth.js` a `api/queries/queries_usuarios.js` para seguir la separación de preocupaciones y evitar duplicación de código.
-*   **Validación de Datos en Frontend**: Implementar validaciones más robustas en el lado del cliente para formularios (ej. para la creación/edición de eventos o mensajes).
-*   **Manejo de Errores UX**: Mejorar la presentación de errores al usuario en el frontend para una experiencia más fluida.
-*   **Gestión Completa de Boletos y Cola**: Desarrollar la interfaz de usuario y la lógica completa para la compra de boletos, asignación de asientos y gestión activa de la cola virtual.
-*   **Paginación/Scroll Infinito**: Para listas grandes de eventos o mensajes, implementar paginación o carga infinita para mejorar el rendimiento.
-*   **Tests de Frontend**: Añadir pruebas unitarias y de integración para los componentes de React.
-*   **Estilos y Temas**: Considerar un sistema de temas más avanzado si se planea una personalización profunda.
+*   **Refactorización de Autenticación**: La lógica de autenticación ha sido parcialmente refactorizada, moviendo el hashing de contraseñas y la función de login a `api/queries/queries_usuarios.js`. Aún se puede revisar para una separación más estricta de capas.
+*   **Validación de Datos en Frontend**: Se ha implementado validación básica en el lado del cliente para el formulario de mensajes del foro. Se recomienda extender estas validaciones a otros formularios (ej. eventos, actores) para una experiencia de usuario más robusta.
+*   **Manejo de Errores UX**: Se ha añadido un mensaje de advertencia para la validación de mensajes del foro. Se puede mejorar la presentación general de errores al usuario en el frontend para una experiencia más fluida y consistente.
+*   **Gestión Completa de Boletos y Cola**: Se ha implementado un sistema robusto de compra de boletos y una gestión de cola virtual funcional en el backend. Las mejoras futuras podrían centrarse en una interfaz de usuario más interactiva y en la integración en tiempo real (websockets) para la gestión de la cola y asientos.
+*   **Paginación/Scroll Infinito**: Para listas grandes de eventos o mensajes, implementar paginación o carga infinita para mejorar el rendimiento y la experiencia del usuario.
+*   **Tests de Frontend**: Añadir pruebas unitarias y de integración para los componentes de React para asegurar la estabilidad y prevenir regresiones.
+*   **Estilos y Temas**: Considerar un sistema de temas más avanzado o una mayor personalización de estilos si se planea una evolución visual profunda.
 
 ---
 Espero que este `README.MD` te sea de gran utilidad para entender y gestionar tu proyecto. ¡Mucho éxito!
@@ -206,19 +213,44 @@ Espero que este `README.MD` te sea de gran utilidad para entender y gestionar tu
 - `PUT /actores/:id` - Actualizar actor
 - `DELETE /actores/:id` - Eliminar actor
 
+### Mensajes del Foro
+- `GET /api/mensajes` - Listar todos los mensajes del foro (puede filtrar por `evento_id` o `parent_id`)
+- `GET /api/mensajes/:evento_id` - Listar mensajes de un evento específico
+- `GET /api/mensajes/replies/:parent_id` - Listar respuestas a un mensaje específico
+- `POST /api/mensajes` - Crear nuevo mensaje (requiere autenticación)
+- `PUT /api/mensajes/:id` - Actualizar mensaje (requiere autenticación, solo autor o admin)
+- `DELETE /api/mensajes/:id` - Eliminar mensaje (requiere autenticación, solo autor o admin)
+- `POST /api/mensajes/reportar/:id` - Reportar un mensaje (requiere autenticación)
+
 ### Boletos
-- `GET /boletos` - Listar todos los boletos
-- `GET /boletos/:id` - Obtener boleto por ID
-- `POST /boletos` - Crear nuevo boleto
-- `PUT /boletos/:id` - Actualizar boleto
-- `DELETE /boletos/:id` - Eliminar boleto
+- `GET /api/boletos` - Listar todos los boletos
+- `GET /api/boletos/:id` - Obtener boleto por ID
+- `POST /api/boletos` - Crear nuevo boleto (requiere autenticación)
+- `POST /api/boletos/comprar` - Comprar múltiples boletos para un evento (requiere autenticación y estar en turno en la cola virtual)
+- `PUT /api/boletos/:id` - Actualizar boleto (requiere autenticación)
+- `DELETE /api/boletos/:id` - Eliminar boleto (requiere autenticación)
+
+### Cola Virtual
+- `GET /api/cola_virtual` - Listar todos los registros de la cola virtual
+- `GET /api/cola_virtual/:id` - Obtener registro de cola virtual por ID
+- `POST /api/cola_virtual` - Crear nuevo registro de cola virtual (requiere autenticación)
+- `POST /api/cola_virtual/join` - Unirse a la cola virtual para un evento (requiere autenticación)
+- `GET /api/cola_virtual/status/:evento_id` - Obtener el estado del usuario en la cola para un evento (requiere autenticación)
+- `GET /api/cola_virtual/length/:evento_id` - Obtener la longitud de la cola para un evento
+- `PUT /api/cola_virtual/:id` - Actualizar registro de cola virtual (requiere autenticación)
+- `DELETE /api/cola_virtual/:id` - Eliminar registro de cola virtual (requiere autenticación)
 
 ### Eventos
-- `GET /eventos` - Listar todos los eventos
-- `GET /eventos/:id` - Obtener evento por ID
-- `POST /eventos` - Crear nuevo evento
-- `PUT /eventos/:id` - Actualizar evento
-- `DELETE /eventos/:id` - Eliminar evento
+- `GET /api/eventos` - Listar todos los eventos
+- `GET /api/eventos/:id` - Obtener evento por ID
+- `POST /api/eventos` - Crear nuevo evento (requiere autenticación y rol de administrador)
+- `PUT /api/eventos/:id` - Actualizar evento (requiere autenticación y rol de administrador)
+- `DELETE /api/eventos/:id` - Eliminar evento (requiere autenticación y rol de administrador)
+
+### Autenticación
+- `POST /api/auth/register` - Registrar un nuevo usuario
+- `POST /api/auth/login` - Iniciar sesión de usuario
+- `GET /api/auth/me` - Obtener información del usuario autenticado (requiere token)
 
 ## Testing
 Pruebas unitarias y de integración, con Mocha + Chai.
