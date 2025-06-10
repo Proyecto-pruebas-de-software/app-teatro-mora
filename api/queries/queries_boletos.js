@@ -1,5 +1,5 @@
 const { Pool } = require('pg');
-const Response = require("../models/response");
+// const Response = require("../models/response"); // Remove Response import as it's not needed in pure queries
 
 // Configuración de la conexión a PostgreSQL
 const pool = new Pool({
@@ -30,7 +30,7 @@ const validateForeignKeys = async (usuario_id, evento_id) => {
         return usuario.rows.length > 0 && evento.rows.length > 0;
     } catch (error) {
         console.error('Error validando claves foráneas:', error);
-        return false;
+        throw error;
     }
 };
 
@@ -48,13 +48,12 @@ const checkAsientoDisponible = async (evento_id, asiento, boletoId = null) => {
         return result.rows.length === 0;
     } catch (error) {
         console.error('Error verificando asiento:', error);
-        return false;
+        throw error;
     }
 };
 
 // CRUD Boletos
-const getBoletos = async (req, res) => {
-    const response = new Response();
+const getBoletos = async () => {
     try {
         const query = `
             SELECT b.id, b.asiento, b.fue_usado, b.turno_numero, b.fecha_compra,
@@ -67,21 +66,14 @@ const getBoletos = async (req, res) => {
         `;
         const results = await pool.query(query);
         
-        return res.status(200).json(response.success(200, "Boletos obtenidos exitosamente", results.rows));
+        return results.rows;
     } catch (error) {
         console.error('Error en getBoletos:', error);
-        return res.status(500).json(response.failure(500, "Error al obtener boletos"));
+        throw error;
     }
 };
 
-const getBoletoById = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
+const getBoletoById = async (id) => {
     try {
         const query = `
             SELECT b.id, b.asiento, b.fue_usado, b.turno_numero, b.fecha_compra,
@@ -95,55 +87,22 @@ const getBoletoById = async (req, res) => {
         const results = await pool.query(query, [id]);
 
         if (results.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Boleto no encontrado"));
+            return null; // Return null if not found
         }
 
-        return res.status(200).json(response.success(200, "Boleto obtenido exitosamente", results.rows[0]));
+        return results.rows[0];
     } catch (error) {
         console.error('Error en getBoletoById:', error);
-        return res.status(500).json(response.failure(500, "Error al obtener el boleto"));
+        throw error;
     }
 };
 
-const createBoleto = async (req, res) => {
-    const response = new Response();
-    const { usuario_id, evento_id, asiento, turno_numero, fue_usado = false } = req.body;
-
-    // Validaciones básicas
-    if (!usuario_id || !evento_id || !asiento) {
-        return res.status(400).json(response.failure(400, "Faltan campos requeridos: usuario_id, evento_id o asiento"));
-    }
-
-    if (!validateAsiento(asiento)) {
-        return res.status(400).json(response.failure(400, "Formato de asiento inválido (ejemplo válido: A12)"));
-    }
-
-    if (!validateEstadoUso(fue_usado)) {
-        return res.status(400).json(response.failure(400, "Estado de uso inválido (debe ser true o false)"));
-    }
-
-    if (turno_numero && !Number.isInteger(turno_numero)) {
-        return res.status(400).json(response.failure(400, "Número de turno debe ser un entero"));
-    }
-
+const createBoleto = async ({ usuario_id, evento_id, asiento, turno_numero, fue_usado = false }) => {
     const client = await pool.connect();
     
     try {
         await client.query('BEGIN');
 
-        // Validar relaciones
-        const fkValidas = await validateForeignKeys(usuario_id, evento_id);
-        if (!fkValidas) {
-            return res.status(404).json(response.failure(404, "Usuario o evento no existen"));
-        }
-
-        // Validar asiento disponible
-        const asientoDisponible = await checkAsientoDisponible(evento_id, asiento);
-        if (!asientoDisponible) {
-            return res.status(409).json(response.failure(409, "El asiento ya está ocupado para este evento"));
-        }
-
-        // Crear boleto
         const query = `
             INSERT INTO boletos 
                 (usuario_id, evento_id, asiento, turno_numero, fue_usado) 
@@ -160,75 +119,31 @@ const createBoleto = async (req, res) => {
 
         await client.query('COMMIT');
         
-        return res.status(201).json(response.success(201, "Boleto creado exitosamente", results.rows[0]));
+        return results.rows[0];
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en createBoleto:', error);
-        return res.status(500).json(response.failure(500, "Error al crear el boleto"));
+        throw error;
     } finally {
         client.release();
     }
 };
 
-const updateBoleto = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-    const { usuario_id, evento_id, asiento, turno_numero, fue_usado } = req.body;
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
-    // Validaciones
-    if (asiento && !validateAsiento(asiento)) {
-        return res.status(400).json(response.failure(400, "Formato de asiento inválido"));
-    }
-
-    if (fue_usado !== undefined && !validateEstadoUso(fue_usado)) {
-        return res.status(400).json(response.failure(400, "Estado de uso inválido"));
-    }
-
-    if (turno_numero && !Number.isInteger(turno_numero)) {
-        return res.status(400).json(response.failure(400, "Número de turno inválido"));
-    }
-
+const updateBoleto = async (id, { usuario_id, evento_id, asiento, turno_numero, fue_usado }) => {
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // Verificar existencia del boleto
-        const boletoExistente = await client.query(
+        const ticketExistente = await pool.query(
             'SELECT * FROM boletos WHERE id = $1',
             [id]
         );
 
-        if (boletoExistente.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Boleto no encontrado"));
+        if (ticketExistente.rows.length === 0) {
+            throw new Error("Boleto no encontrado");
         }
 
-        // Validar relaciones si se actualizan
-        if (usuario_id || evento_id) {
-            const fkValidas = await validateForeignKeys(
-                usuario_id || boletoExistente.rows[0].usuario_id,
-                evento_id || boletoExistente.rows[0].evento_id
-            );
-            if (!fkValidas) {
-                return res.status(404).json(response.failure(404, "Usuario o evento no existen"));
-            }
-        }
-
-        // Validar asiento si se actualiza
-        if (asiento) {
-            const mismoEvento = evento_id || boletoExistente.rows[0].evento_id;
-            const asientoDisponible = await checkAsientoDisponible(mismoEvento, asiento, id);
-            
-            if (!asientoDisponible) {
-                return res.status(409).json(response.failure(409, "El asiento ya está ocupado para este evento"));
-            }
-        }
-
-        // Actualizar
         const query = `
             UPDATE boletos SET
                 usuario_id = COALESCE($1, usuario_id),
@@ -244,88 +159,150 @@ const updateBoleto = async (req, res) => {
             usuario_id || null,
             evento_id || null,
             asiento || null,
-            turno_numero || null,
+            turno_numero !== undefined ? turno_numero : null,
             fue_usado !== undefined ? fue_usado : null,
             id
         ]);
 
         await client.query('COMMIT');
         
-        return res.status(200).json(response.success(200, "Boleto actualizado exitosamente", results.rows[0]));
+        return results.rows[0];
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en updateBoleto:', error);
-        return res.status(500).json(response.failure(500, "Error al actualizar el boleto"));
+        throw error;
     } finally {
         client.release();
     }
 };
 
-const deleteBoleto = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
+const deleteBoleto = async (id) => {
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // Verificar existencia
-        const boletoExistente = await client.query(
+        const ticketExistente = await pool.query(
             'SELECT id FROM boletos WHERE id = $1',
             [id]
         );
 
-        if (boletoExistente.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Boleto no encontrado"));
+        if (ticketExistente.rows.length === 0) {
+            throw new Error("Boleto no encontrado");
         }
 
-        // Eliminar
-        const results = await client.query(
-            'DELETE FROM boletos WHERE id = $1 RETURNING id, asiento',
+        const { rowCount } = await client.query(
+            'DELETE FROM boletos WHERE id = $1',
             [id]
         );
 
         await client.query('COMMIT');
-        
-        return res.status(200).json(response.success(200, "Boleto eliminado exitosamente", results.rows[0]));
+
+        return rowCount > 0;
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en deleteBoleto:', error);
-        return res.status(500).json(response.failure(500, "Error al eliminar el boleto"));
+        throw error;
     } finally {
         client.release();
     }
 };
 
-// Para testing - limpia la tabla de boletos
 const clearBoletosForTesting = async () => {
     if (process.env.NODE_ENV !== 'test') return;
-    
+
     try {
-        await pool.query("DELETE FROM boletos WHERE asiento LIKE 'A1%'");
+        await pool.query("DELETE FROM boletos WHERE asiento LIKE '%test%'");
     } catch (error) {
         console.error('Error al limpiar boletos para testing:', error);
         throw error;
     }
 };
 
-module.exports = {
-    getAll: getBoletos,
-    getById: getBoletoById,
-    create: createBoleto,
-    update: updateBoleto,
-    delete: deleteBoleto,
-    pool,
-    clearBoletosForTesting,
-    _test: {
-        validateAsiento,
-        validateEstadoUso,
-        validateForeignKeys,
-        checkAsientoDisponible
+/**
+ * Procesa la compra de múltiples boletos para un evento.
+ * Realiza una transacción para asegurar la integridad de los datos.
+ */
+const purchaseTickets = async ({ usuario_id, evento_id, cantidad }) => {
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        // 1. Obtener detalles del evento y verificar disponibilidad
+        const eventResult = await client.query(
+            'SELECT id, nombre, aforo, vendidos, precio FROM eventos WHERE id = $1 FOR UPDATE',
+            [evento_id]
+        );
+
+        if (eventResult.rows.length === 0) {
+            throw new Error('Evento no encontrado.');
+        }
+
+        const evento = eventResult.rows[0];
+        const boletosDisponibles = evento.aforo - evento.vendidos;
+
+        if (boletosDisponibles < cantidad) {
+            throw new Error(`Solo quedan ${boletosDisponibles} boletos disponibles para ${evento.nombre}.`);
+        }
+
+        // 2. Actualizar el número de boletos vendidos en la tabla de eventos
+        const updatedEventResult = await client.query(
+            'UPDATE eventos SET vendidos = vendidos + $1 WHERE id = $2 RETURNING id, vendidos',
+            [cantidad, evento_id]
+        );
+
+        // 3. Crear registros individuales de boletos
+        const purchasedTickets = [];
+        for (let i = 0; i < cantidad; i++) {
+            const asientoGenerico = `General-${evento.vendidos + i + 1}`;
+            const createBoletoQuery = `
+                INSERT INTO boletos (usuario_id, evento_id, asiento, turno_numero, fue_usado)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id, asiento, fecha_compra
+            `;
+            const ticketResult = await client.query(createBoletoQuery, [
+                usuario_id,
+                evento_id,
+                asientoGenerico,
+                turno_numero || null,
+                false // fue_usado = false por defecto
+            ]);
+            purchasedTickets.push(ticketResult.rows[0]);
+        }
+
+        // 4. (Opcional) Actualizar estado de la cola virtual si aplica
+        // Si estás integrando con la cola, aquí podrías marcar al usuario como 'atendido' o removerlo de la cola.
+        // Por ejemplo: await client.query('UPDATE cola_virtual SET en_turno = false WHERE usuario_id = $1 AND evento_id = $2', [usuario_id, evento_id]);
+
+        // Actualizar estado de la cola virtual: marcar al usuario como no en turno
+        await client.query(
+            'UPDATE cola_virtual SET en_turno = false WHERE usuario_id = $1 AND evento_id = $2',
+            [usuario_id, evento_id]
+        );
+
+        await client.query('COMMIT');
+        return { success: true, message: `Compra exitosa de ${cantidad} boletos para ${evento.nombre}.`, tickets: purchasedTickets, compraId: purchasedTickets[0]?.id || null };
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error en purchaseTickets:', error);
+        throw error;
+    } finally {
+        client.release();
     }
+};
+
+module.exports = {
+    getBoletos,
+    getBoletoById,
+    createBoleto,
+    updateBoleto,
+    deleteBoleto,
+    validateAsiento,
+    validateEstadoUso,
+    validateForeignKeys,
+    checkAsientoDisponible,
+    clearBoletosForTesting,
+    purchaseTickets,
+    pool
 };

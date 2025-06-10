@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import axios from 'axios'
 
-const AuthContext = createContext(null)
+export const AuthContext = createContext(null)
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
@@ -15,7 +15,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Check if user is logged in on mount
+  // Verificar si el usuario ha iniciado sesión al montar el componente
   useEffect(() => {
     checkAuth()
   }, [])
@@ -24,11 +24,12 @@ export const AuthProvider = ({ children }) => {
     try {
       const token = localStorage.getItem('token')
       if (token) {
-        // Set default authorization header
+        // Establecer encabezado de autorización predeterminado
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-        // Verify token and get user data
+        // Verificar token y obtener datos de usuario
         const response = await axios.get('/api/auth/me')
-        console.log('Auth check response:', response.data)
+        console.log('Auth check response from /me:', response.data);
+        console.log('User object about to be set in AuthContext (checkAuth):', response.data.data);
         setUser(response.data.data)
       }
     } catch (error) {
@@ -44,9 +45,10 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.post('/api/auth/login', { email, password })
       const { data } = response.data
-      console.log('Login response:', response.data)
+      console.log('Login API response:', response.data);
+      console.log('User object about to be set in AuthContext (login):', data.user);
       
-      // Store token and set axios default header
+      // Almacenar token y establecer encabezado predeterminado de axios
       localStorage.setItem('token', data.token)
       axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
       
@@ -64,9 +66,11 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       const response = await axios.post('/api/auth/register', userData)
-      const { data } = response.data
+      console.log('Register API response:', response.data);
+      const { data } = response.data;
+      console.log('User object about to be set in AuthContext (register):', data.user);
       
-      // Store token and set axios default header
+      // Almacenar token y establecer encabezado predeterminado de axios
       localStorage.setItem('token', data.token)
       axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
       
@@ -87,7 +91,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout failed:', error)
     } finally {
-      // Clear local storage and state regardless of API call success
+      // Limpiar el almacenamiento local y el estado independientemente del éxito de la llamada a la API
       localStorage.removeItem('token')
       delete axios.defaults.headers.common['Authorization']
       setUser(null)
@@ -108,7 +112,7 @@ export const AuthProvider = ({ children }) => {
   }
 
   if (loading) {
-    return null // Or a loading spinner
+    return null // O un spinner de carga
   }
 
   return (
@@ -116,6 +120,4 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export default AuthContext 
+} 

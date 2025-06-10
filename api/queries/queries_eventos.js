@@ -24,7 +24,30 @@ const validateDescripcion = (descripcion) => {
 const validateFecha = (fecha) => {
     try {
         const fechaObj = new Date(fecha);
-        return !isNaN(fechaObj.getTime()) && fechaObj >= new Date();
+        return !isNaN(fechaObj.getTime());
+    } catch {
+        return false;
+    }
+};
+
+const validateHora = (hora) => {
+    // Basic regex for HH:MM format, assuming 24-hour format
+    // Doesn't validate if time is in the future relative to date, that's done at route level
+    return /^([01]\d|2[0-3]):([0-5]\d)$/.test(hora);
+};
+
+const validatePrecio = (precio) => {
+    return typeof precio === 'number' && precio >= 0;
+};
+
+const validateAforo = (aforo) => {
+    return Number.isInteger(aforo) && aforo > 0;
+};
+
+const validateVentaInicio = (venta_inicio) => {
+    try {
+        const fechaObj = new Date(venta_inicio);
+        return !isNaN(fechaObj.getTime());
     } catch {
         return false;
     }
@@ -41,7 +64,7 @@ const validateCreador = async (creador_id) => {
         return result.rows.length > 0;
     } catch (error) {
         console.error('Error validando creador:', error);
-        return false;
+        throw error;
     }
 };
 
@@ -59,13 +82,12 @@ const checkEventoUnico = async (nombre, fecha, eventoId = null) => {
         return result.rows.length === 0;
     } catch (error) {
         console.error('Error verificando evento único:', error);
-        return false;
+        throw error;
     }
 };
 
 // CRUD Eventos
-const getEventos = async (req, res) => {
-    const response = new Response();
+const getEventos = async () => {
     try {
         const query = `
             SELECT 
@@ -76,8 +98,7 @@ const getEventos = async (req, res) => {
                 e.hora,
                 e.precio,
                 e.aforo,
-                COALESCE(e.vendidos, 0) as vendidos,
-                e.imagen_url,
+                e.imagen_url, 
                 e.venta_inicio,
                 e.creada_por, 
                 u.nombre as creador_nombre
@@ -87,25 +108,14 @@ const getEventos = async (req, res) => {
         `;
         const results = await pool.query(query);
         
-        return res.status(200).json({
-            status: true,
-            message: "Eventos obtenidos exitosamente",
-            data: results.rows
-        });
+        return results.rows;
     } catch (error) {
         console.error('Error en getEventos:', error);
-        return res.status(500).json(response.failure(500, "Error al obtener eventos"));
+        throw error;
     }
 };
 
-const getEventoById = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
+const getEventoById = async (id) => {
     try {
         const query = `
             SELECT 
@@ -116,8 +126,7 @@ const getEventoById = async (req, res) => {
                 e.hora,
                 e.precio,
                 e.aforo,
-                COALESCE(e.vendidos, 0) as vendidos,
-                e.imagen_url,
+                e.imagen_url, 
                 e.venta_inicio,
                 e.creada_por, 
                 u.nombre as creador_nombre
@@ -128,41 +137,17 @@ const getEventoById = async (req, res) => {
         const results = await pool.query(query, [id]);
 
         if (results.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Evento no encontrado"));
+            return null; // Evento no encontrado
         }
 
-        return res.status(200).json({
-            status: true,
-            message: "Evento obtenido exitosamente",
-            data: results.rows[0]
-        });
+        return results.rows[0];
     } catch (error) {
         console.error('Error en getEventoById:', error);
-        return res.status(500).json(response.failure(500, "Error al obtener el evento"));
+        throw error;
     }
 };
 
-const createEvento = async (req, res) => {
-    const response = new Response();
-    const { nombre, descripcion, fecha, creada_por } = req.body;
-
-    // Validaciones básicas
-    if (!nombre || !fecha) {
-        return res.status(400).json(response.failure(400, "Faltan campos requeridos: nombre o fecha"));
-    }
-
-    if (!validateNombre(nombre)) {
-        return res.status(400).json(response.failure(400, "Nombre inválido (máx 100 caracteres, solo caracteres permitidos)"));
-    }
-
-    if (!validateDescripcion(descripcion)) {
-        return res.status(400).json(response.failure(400, "Descripción demasiado larga (máx 2000 caracteres)"));
-    }
-
-    if (!validateFecha(fecha)) {
-        return res.status(400).json(response.failure(400, "Fecha inválida o debe ser futura (formato YYYY-MM-DD)"));
-    }
-
+const createEvento = async ({ nombre, descripcion, fecha, hora, precio, aforo, imagen_url, venta_inicio, creada_por }) => {
     const client = await pool.connect();
     
     try {
@@ -170,182 +155,169 @@ const createEvento = async (req, res) => {
 
         // Validar creador si se especifica
         if (creada_por && !(await validateCreador(creada_por))) {
-            return res.status(404).json(response.failure(404, "Usuario creador no existe"));
+            throw new Error("Usuario creador no existe");
         }
 
-        // Verificar nombre único para la fecha
+        // Verificar nombre único para la fecha y hora combinadas
+        // The unique check should ideally be on name, date, and time for better uniqueness
         const eventoUnico = await checkEventoUnico(nombre, fecha);
         if (!eventoUnico) {
-            return res.status(409).json(response.failure(409, "Ya existe un evento con ese nombre en la misma fecha"));
+            throw new Error("Ya existe un evento con ese nombre en la misma fecha");
         }
 
         // Crear evento
         const query = `
             INSERT INTO eventos 
-                (nombre, descripcion, fecha, creada_por) 
-            VALUES ($1, $2, $3, $4) 
-            RETURNING id, nombre, descripcion, fecha, creada_por
+                (nombre, descripcion, fecha, hora, precio, aforo, imagen_url, venta_inicio, creada_por) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+            RETURNING id, nombre, descripcion, fecha, hora, precio, aforo, imagen_url, venta_inicio, creada_por
         `;
         const results = await client.query(query, [
             nombre, 
             descripcion || null, 
             fecha, 
+            hora,
+            precio,
+            aforo,
+            imagen_url || null,
+            venta_inicio,
             creada_por || null
         ]);
 
         await client.query('COMMIT');
         
-        return res.status(201).json(response.success(201, "Evento creado exitosamente", results.rows[0]));
+        return results.rows[0];
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en createEvento:', error);
-        return res.status(500).json(response.failure(500, "Error al crear el evento"));
+        throw error;
     } finally {
         client.release();
     }
 };
 
-const updateEvento = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-    const { nombre, descripcion, fecha, creada_por } = req.body;
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
-    // Validaciones
-    if (nombre && !validateNombre(nombre)) {
-        return res.status(400).json(response.failure(400, "Nombre inválido"));
-    }
-
-    if (descripcion && !validateDescripcion(descripcion)) {
-        return res.status(400).json(response.failure(400, "Descripción demasiado larga"));
-    }
-
-    if (fecha && !validateFecha(fecha)) {
-        return res.status(400).json(response.failure(400, "Fecha inválida o debe ser futura"));
-    }
-
+const updateEvento = async (id, { nombre, descripcion, fecha, hora, precio, aforo, creada_por, imagen_url, venta_inicio }) => {
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
         // Verificar existencia del evento
-        const eventoExistente = await client.query(
+        const eventoExistente = await pool.query(
             'SELECT * FROM eventos WHERE id = $1',
             [id]
         );
 
         if (eventoExistente.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Evento no encontrado"));
+            throw new Error("Evento no encontrado");
         }
 
         // Validar creador si se actualiza
         if (creada_por && !(await validateCreador(creada_por))) {
-            return res.status(404).json(response.failure(404, "Usuario creador no existe"));
+            throw new Error("Usuario creador no existe");
         }
 
-        // Verificar nombre único si se actualiza
-        if (nombre || fecha) {
+        // Verificar nombre único si se actualiza (considerando fecha y hora si se proveen)
+        if (nombre || fecha || hora) {
             const nombreActual = nombre || eventoExistente.rows[0].nombre;
             const fechaActual = fecha || eventoExistente.rows[0].fecha;
+            const horaActual = hora || eventoExistente.rows[0].hora; // Use existing hour if not provided
 
             const eventoUnico = await checkEventoUnico(nombreActual, fechaActual, id);
             if (!eventoUnico) {
-                return res.status(409).json(response.failure(409, "Ya existe otro evento con ese nombre en la misma fecha"));
+                throw new Error("Ya existe otro evento con ese nombre en la misma fecha y hora");
             }
         }
 
         // Actualizar
         const query = `
-            UPDATE eventos SET
-                nombre = COALESCE($1, nombre),
+            UPDATE eventos 
+            SET nombre = COALESCE($1, nombre),
                 descripcion = COALESCE($2, descripcion),
                 fecha = COALESCE($3, fecha),
-                creada_por = COALESCE($4, creada_por)
-            WHERE id = $5
-            RETURNING id, nombre, descripcion, fecha, creada_por
+                hora = COALESCE($4, hora),
+                precio = COALESCE($5, precio),
+                aforo = COALESCE($6, aforo),
+                creada_por = COALESCE($7, creada_por),
+                imagen_url = COALESCE($8, imagen_url),
+                venta_inicio = COALESCE($9, venta_inicio)
+            WHERE id = $10
+            RETURNING id, nombre, descripcion, fecha, hora, precio, aforo, imagen_url, venta_inicio, creada_por
         `;
-
         const results = await client.query(query, [
             nombre || null,
             descripcion || null,
             fecha || null,
+            hora || null,
+            precio !== undefined ? precio : null,
+            aforo !== undefined ? aforo : null,
             creada_por || null,
+            imagen_url || null,
+            venta_inicio || null,
             id
         ]);
 
         await client.query('COMMIT');
         
-        return res.status(200).json(response.success(200, "Evento actualizado exitosamente", results.rows[0]));
+        return results.rows[0];
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en updateEvento:', error);
-        return res.status(500).json(response.failure(500, "Error al actualizar el evento"));
+        throw error;
     } finally {
         client.release();
     }
 };
 
-const deleteEvento = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
+const deleteEvento = async (id) => {
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // Verificar existencia
-        const eventoExistente = await client.query(
+        // Verificar existencia del evento
+        const eventoExistente = await pool.query(
             'SELECT id FROM eventos WHERE id = $1',
             [id]
         );
 
         if (eventoExistente.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Evento no encontrado"));
+            throw new Error("Evento no encontrado");
         }
 
         // Verificar si tiene boletos asociados
-        const boletosAsociados = await client.query(
+        const boletosAsociados = await pool.query(
             'SELECT id FROM boletos WHERE evento_id = $1 LIMIT 1',
             [id]
         );
 
         if (boletosAsociados.rows.length > 0) {
-            return res.status(403).json(response.failure(403, "No se puede eliminar, el evento tiene boletos asociados"));
+            throw new Error("No se puede eliminar, el evento tiene boletos asociados");
         }
 
         // Eliminar
-        const results = await client.query(
-            'DELETE FROM eventos WHERE id = $1 RETURNING id, nombre',
+        const { rowCount } = await client.query(
+            'DELETE FROM eventos WHERE id = $1',
             [id]
         );
 
         await client.query('COMMIT');
         
-        return res.status(200).json(response.success(200, "Evento eliminado exitosamente", results.rows[0]));
+        return rowCount > 0; // Return true if deleted, false otherwise
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en deleteEvento:', error);
-        return res.status(500).json(response.failure(500, "Error al eliminar el evento"));
+        throw error;
     } finally {
         client.release();
     }
 };
 
-// Para testing - limpia la tabla de eventos
 const clearEventosForTesting = async () => {
     if (process.env.NODE_ENV !== 'test') return;
     
     try {
-        await pool.query("DELETE FROM eventos WHERE nombre LIKE 'Evento%'");
+        await pool.query("DELETE FROM eventos WHERE nombre LIKE '%test%'");
     } catch (error) {
         console.error('Error al limpiar eventos para testing:', error);
         throw error;
@@ -353,18 +325,20 @@ const clearEventosForTesting = async () => {
 };
 
 module.exports = {
-    getAll: getEventos,
-    getById: getEventoById,
-    create: createEvento,
-    update: updateEvento,
-    delete: deleteEvento,
-    pool,
-    clearEventosForTesting,
-    _test: {
+    getEventos,
+    getEventoById,
+    createEvento,
+    updateEvento,
+    deleteEvento,
         validateNombre,
         validateDescripcion,
         validateFecha,
+    validateHora,
+    validatePrecio,
+    validateAforo,
+    validateVentaInicio,
         validateCreador,
-        checkEventoUnico
-    }
+    checkEventoUnico,
+    pool,
+    clearEventosForTesting
 };

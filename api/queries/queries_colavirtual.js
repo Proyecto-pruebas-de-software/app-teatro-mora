@@ -1,5 +1,5 @@
 const { Pool } = require('pg');
-const Response = require("../models/response");
+// const Response = require("../models/response"); // Remove Response import as it's not needed in pure queries
 
 // Configuración de la conexión a PostgreSQL
 const pool = new Pool({
@@ -30,7 +30,7 @@ const validateForeignKeys = async (usuario_id, evento_id) => {
         return usuario.rows.length > 0 && evento.rows.length > 0;
     } catch (error) {
         console.error('Error validando claves foráneas:', error);
-        return false;
+        throw error;
     }
 };
 
@@ -48,13 +48,149 @@ const checkTurnoDisponible = async (evento_id, turno_numero, colaId = null) => {
         return result.rows.length === 0;
     } catch (error) {
         console.error('Error verificando turno:', error);
-        return false;
+        throw error;
+    }
+};
+
+/**
+ * Añade un usuario a la cola virtual para un evento.
+ * Si ya está en la cola, devuelve su turno existente.
+ */
+const joinQueue = async (usuario_id, evento_id) => {
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        // 1. Verificar si el usuario ya está en la cola para este evento
+        const existingQueueEntry = await client.query(
+            'SELECT id, turno_numero, en_turno FROM cola_virtual WHERE usuario_id = $1 AND evento_id = $2',
+            [usuario_id, evento_id]
+        );
+
+        if (existingQueueEntry.rows.length > 0) {
+            // Ya está en la cola
+            await client.query('COMMIT');
+            return existingQueueEntry.rows[0];
+        }
+
+        // 2. Determinar el siguiente número de turno disponible
+        const maxTurnoResult = await client.query(
+            'SELECT MAX(turno_numero) as max_turno FROM cola_virtual WHERE evento_id = $1',
+            [evento_id]
+        );
+        const nextTurno = (maxTurnoResult.rows[0].max_turno || 0) + 1;
+
+        // 3. Insertar nuevo registro en la cola
+        const insertQuery = `
+            INSERT INTO cola_virtual (usuario_id, evento_id, turno_numero, en_turno)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, usuario_id, evento_id, turno_numero, en_turno, fecha_creacion
+        `;
+        const result = await client.query(insertQuery, [usuario_id, evento_id, nextTurno, false]);
+
+        await client.query('COMMIT');
+        return result.rows[0];
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error en joinQueue:', error);
+        throw error;
+    } finally {
+        client.release();
+    }
+};
+
+/**
+ * Obtiene el estado de un usuario en la cola para un evento específico.
+ * Retorna 'not_in_queue', 'in_queue_waiting', 'in_turn'.
+ */
+const getQueueStatusForUser = async (usuario_id, evento_id) => {
+    try {
+        const result = await pool.query(
+            'SELECT turno_numero, en_turno FROM cola_virtual WHERE usuario_id = $1 AND evento_id = $2',
+            [usuario_id, evento_id]
+        );
+
+        if (result.rows.length === 0) {
+            return { status: 'not_in_queue' };
+        }
+
+        const { turno_numero, en_turno } = result.rows[0];
+
+        if (en_turno) {
+            return { status: 'in_turn', turno_numero };
+        } else {
+            // Check if there's any active turn before this user's turn
+            const activeTurnsBefore = await pool.query(
+                'SELECT COUNT(*) FROM cola_virtual WHERE evento_id = $1 AND en_turno = true AND turno_numero < $2',
+                [evento_id, turno_numero]
+            );
+
+            if (activeTurnsBefore.rows[0].count > 0) {
+                // This means someone before them is already in turn, or they are waiting
+                return { status: 'in_queue_waiting', turno_numero };
+            } else {
+                // If no active turns before, they should be the next in line or already in turn (handled above)
+                // This condition might need refinement depending on precise queue management,
+                // but for now, it means they are waiting.
+                return { status: 'in_queue_waiting', turno_numero };
+            }
+        }
+    } catch (error) {
+        console.error('Error en getQueueStatusForUser:', error);
+        throw error;
+    }
+};
+
+/**
+ * Obtiene el número de turno más bajo que no ha sido atendido (en_turno = false) para un evento.
+ */
+const getMinTurnoEnCola = async (evento_id) => {
+    try {
+        const result = await pool.query(
+            'SELECT MIN(turno_numero) as min_turno FROM cola_virtual WHERE evento_id = $1 AND en_turno = false',
+            [evento_id]
+        );
+        return result.rows[0].min_turno;
+    } catch (error) {
+        console.error('Error en getMinTurnoEnCola:', error);
+        throw error;
+    }
+};
+
+/**
+ * Establece el estado 'en_turno' a true para un usuario específico en la cola.
+ */
+const setTurnoEnTurno = async (usuario_id, evento_id, turno_numero) => {
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+        const updateQuery = `
+            UPDATE cola_virtual
+            SET en_turno = true
+            WHERE usuario_id = $1 AND evento_id = $2 AND turno_numero = $3
+            RETURNING id, usuario_id, evento_id, turno_numero, en_turno, fecha_creacion
+        `;
+        const result = await client.query(updateQuery, [usuario_id, evento_id, turno_numero]);
+
+        if (result.rows.length === 0) {
+            throw new Error('Registro de cola no encontrado para actualizar turno.');
+        }
+
+        await client.query('COMMIT');
+        return result.rows[0];
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error en setTurnoEnTurno:', error);
+        throw error;
+    } finally {
+        client.release();
     }
 };
 
 // CRUD Cola Virtual
-const getColaVirtual = async (req, res) => {
-    const response = new Response();
+const getColaVirtual = async () => {
     try {
         const query = `
             SELECT cv.id, cv.turno_numero, cv.en_turno, cv.fecha_creacion,
@@ -67,21 +203,14 @@ const getColaVirtual = async (req, res) => {
         `;
         const results = await pool.query(query);
         
-        return res.status(200).json(response.success(200, "Registros de cola obtenidos exitosamente", results.rows));
+        return results.rows;
     } catch (error) {
         console.error('Error en getColaVirtual:', error);
-        return res.status(500).json(response.failure(500, "Error al obtener registros de cola"));
+        throw error;
     }
 };
 
-const getColaVirtualById = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
+const getColaVirtualById = async (id) => {
     try {
         const query = `
             SELECT cv.id, cv.turno_numero, cv.en_turno, cv.fecha_creacion,
@@ -95,51 +224,22 @@ const getColaVirtualById = async (req, res) => {
         const results = await pool.query(query, [id]);
 
         if (results.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Registro de cola no encontrado"));
+            return null; // Return null if not found
         }
 
-        return res.status(200).json(response.success(200, "Registro de cola obtenido exitosamente", results.rows[0]));
+        return results.rows[0];
     } catch (error) {
         console.error('Error en getColaVirtualById:', error);
-        return res.status(500).json(response.failure(500, "Error al obtener el registro de cola"));
+        throw error;
     }
 };
 
-const createColaVirtual = async (req, res) => {
-    const response = new Response();
-    const { usuario_id, evento_id, turno_numero, en_turno = false } = req.body;
-
-    // Validaciones básicas
-    if (!usuario_id || !evento_id || !turno_numero) {
-        return res.status(400).json(response.failure(400, "Faltan campos requeridos: usuario_id, evento_id o turno_numero"));
-    }
-
-    if (!validateTurno(turno_numero)) {
-        return res.status(400).json(response.failure(400, "Número de turno inválido (debe ser entero positivo)"));
-    }
-
-    if (!validateEstadoTurno(en_turno)) {
-        return res.status(400).json(response.failure(400, "Estado de turno inválido (debe ser true o false)"));
-    }
-
+const createColaVirtual = async ({ usuario_id, evento_id, turno_numero, en_turno = false }) => {
     const client = await pool.connect();
     
     try {
         await client.query('BEGIN');
 
-        // Validar relaciones
-        const fkValidas = await validateForeignKeys(usuario_id, evento_id);
-        if (!fkValidas) {
-            return res.status(404).json(response.failure(404, "Usuario o evento no existen"));
-        }
-
-        // Validar turno disponible
-        const turnoDisponible = await checkTurnoDisponible(evento_id, turno_numero);
-        if (!turnoDisponible) {
-            return res.status(409).json(response.failure(409, "El número de turno ya está en uso para este evento"));
-        }
-
-        // Crear registro en cola
         const query = `
             INSERT INTO cola_virtual 
                 (usuario_id, evento_id, turno_numero, en_turno) 
@@ -155,71 +255,31 @@ const createColaVirtual = async (req, res) => {
 
         await client.query('COMMIT');
         
-        return res.status(201).json(response.success(201, "Registro de cola creado exitosamente", results.rows[0]));
+        return results.rows[0];
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en createColaVirtual:', error);
-        return res.status(500).json(response.failure(500, "Error al crear el registro de cola"));
+        throw error;
     } finally {
         client.release();
     }
 };
 
-const updateColaVirtual = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-    const { usuario_id, evento_id, turno_numero, en_turno } = req.body;
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
-    // Validaciones
-    if (turno_numero && !validateTurno(turno_numero)) {
-        return res.status(400).json(response.failure(400, "Número de turno inválido"));
-    }
-
-    if (en_turno !== undefined && !validateEstadoTurno(en_turno)) {
-        return res.status(400).json(response.failure(400, "Estado de turno inválido"));
-    }
-
+const updateColaVirtual = async (id, { usuario_id, evento_id, turno_numero, en_turno }) => {
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // Verificar existencia del registro
-        const registroExistente = await client.query(
+        const registroExistente = await pool.query(
             'SELECT * FROM cola_virtual WHERE id = $1',
             [id]
         );
 
         if (registroExistente.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Registro de cola no encontrado"));
+            throw new Error("Registro de cola no encontrado");
         }
 
-        // Validar relaciones si se actualizan
-        if (usuario_id || evento_id) {
-            const fkValidas = await validateForeignKeys(
-                usuario_id || registroExistente.rows[0].usuario_id,
-                evento_id || registroExistente.rows[0].evento_id
-            );
-            if (!fkValidas) {
-                return res.status(404).json(response.failure(404, "Usuario o evento no existen"));
-            }
-        }
-
-        // Validar turno si se actualiza
-        if (turno_numero) {
-            const mismoEvento = evento_id || registroExistente.rows[0].evento_id;
-            const turnoDisponible = await checkTurnoDisponible(mismoEvento, turno_numero, id);
-            
-            if (!turnoDisponible) {
-                return res.status(409).json(response.failure(409, "El número de turno ya está en uso para este evento"));
-            }
-        }
-
-        // Actualizar
         const query = `
             UPDATE cola_virtual SET
                 usuario_id = COALESCE($1, usuario_id),
@@ -240,81 +300,90 @@ const updateColaVirtual = async (req, res) => {
 
         await client.query('COMMIT');
         
-        return res.status(200).json(response.success(200, "Registro de cola actualizado exitosamente", results.rows[0]));
+        return results.rows[0];
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en updateColaVirtual:', error);
-        return res.status(500).json(response.failure(500, "Error al actualizar el registro de cola"));
+        throw error;
     } finally {
         client.release();
     }
 };
 
-const deleteColaVirtual = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
+const deleteColaVirtual = async (id) => {
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // Verificar existencia
-        const registroExistente = await client.query(
+        const registroExistente = await pool.query(
             'SELECT id FROM cola_virtual WHERE id = $1',
             [id]
         );
 
         if (registroExistente.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Registro de cola no encontrado"));
+            throw new Error("Registro de cola no encontrado");
         }
 
-        // Eliminar
-        const results = await client.query(
-            'DELETE FROM cola_virtual WHERE id = $1 RETURNING id, turno_numero',
+        const { rowCount } = await client.query(
+            'DELETE FROM cola_virtual WHERE id = $1',
             [id]
         );
 
         await client.query('COMMIT');
-        
-        return res.status(200).json(response.success(200, "Registro de cola eliminado exitosamente", results.rows[0]));
+
+        return rowCount > 0;
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en deleteColaVirtual:', error);
-        return res.status(500).json(response.failure(500, "Error al eliminar el registro de cola"));
+        throw error;
     } finally {
         client.release();
     }
 };
 
-// Para testing - limpia la tabla de cola_virtual
 const clearColaVirtualForTesting = async () => {
     if (process.env.NODE_ENV !== 'test') return;
     
     try {
-        await pool.query("DELETE FROM cola_virtual WHERE turno_numero BETWEEN 1 AND 1000");
+        await pool.query("DELETE FROM cola_virtual");
     } catch (error) {
-        console.error('Error al limpiar cola_virtual para testing:', error);
+        console.error('Error al limpiar cola virtual para testing:', error);
+        throw error;
+    }
+};
+
+/**
+ * Obtiene la longitud actual de la cola virtual para un evento específico.
+ */
+const getQueueLength = async (evento_id) => {
+    try {
+        const result = await pool.query(
+            'SELECT COUNT(*) FROM cola_virtual WHERE evento_id = $1',
+            [evento_id]
+        );
+        return parseInt(result.rows[0].count, 10);
+    } catch (error) {
+        console.error('Error en getQueueLength:', error);
         throw error;
     }
 };
 
 module.exports = {
-    getAll: getColaVirtual,
-    getById: getColaVirtualById,
-    create: createColaVirtual,
-    update: updateColaVirtual,
-    delete: deleteColaVirtual,
-    pool,
+    getColaVirtual,
+    getColaVirtualById,
+    createColaVirtual,
+    updateColaVirtual,
+    deleteColaVirtual,
+    validateTurno,
+    validateEstadoTurno,
+    validateForeignKeys,
+    checkTurnoDisponible,
+    joinQueue,
+    getQueueStatusForUser,
+    getMinTurnoEnCola,
+    setTurnoEnTurno,
     clearColaVirtualForTesting,
-    _test: {
-        validateTurno,
-        validateEstadoTurno,
-        validateForeignKeys,
-        checkTurnoDisponible
-    }
+    getQueueLength,
+    pool
 };

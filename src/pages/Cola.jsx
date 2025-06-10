@@ -21,42 +21,118 @@ import {
   DialogContentText,
   DialogActions,
   LinearProgress,
+  IconButton
 } from '@mui/material'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import axios from 'axios'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
 function Cola() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const queryParams = new URLSearchParams(location.search)
+  const eventoId = queryParams.get('eventoId')
+  const initialTurno = queryParams.get('turno')
+
+  const { isAuthenticated, user } = useAuth()
+
   const [enCola, setEnCola] = useState(false)
   const [esMiTurno, setEsMiTurno] = useState(false)
-  const [tiempoRestante, setTiempoRestante] = useState(300) // 5 minutos en segundos
+  const [miTurnoNumero, setMiTurnoNumero] = useState(initialTurno ? parseInt(initialTurno) : null)
+  const [tiempoRestante, setTiempoRestante] = useState(300)
   const [colaAbierta, setColaAbierta] = useState(false)
+  const [eventoData, setEventoData] = useState(null)
+  const [longitudCola, setLongitudCola] = useState(null)
 
-  const { data: datoCola, isLoading, error } = useQuery({
-    queryKey: ['cola'],
+  const { data: queueStatus, isLoading: isLoadingQueueStatus, error: errorQueueStatus, refetch: refetchQueueStatus } = useQuery({
+    queryKey: ['userQueueStatus', eventoId, user?.id],
     queryFn: async () => {
-      const response = await axios.get('/api/cola')
-      return response.data
+      if (!eventoId || !user?.id) return null
+      const response = await axios.get(`/api/cola_virtual/status/${eventoId}`)
+      return response.data.data
     },
-    refetchInterval: 5000 // Actualizar cada 5 segundos
+    enabled: !!eventoId && !!user?.id,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   })
 
-  // Verificar si la cola debe estar abierta (1 hora antes de la venta)
+  // Query to fetch global queue length for the event
+  const { data: queueLengthData, isLoading: isLoadingQueueLength, error: errorQueueLength } = useQuery({
+    queryKey: ['queueLength', eventoId],
+    queryFn: async () => {
+      if (!eventoId) return null;
+      const response = await axios.get(`/api/cola_virtual/length/${eventoId}`);
+      return response.data.data; // Assuming backend returns { data: count }
+    },
+    enabled: !!eventoId, // Only enable if eventId is available
+    refetchInterval: 5000, // Refresh every 5 seconds
+  });
+
   useEffect(() => {
-    const verificarEstadoCola = async () => {
+    if (queueLengthData !== null) {
+      setLongitudCola(queueLengthData);
+    }
+  }, [queueLengthData]);
+
+  useEffect(() => {
+    const fetchEventDetailsAndQueueStatus = async () => {
+      if (!eventoId) return
       try {
-        const response = await axios.get('/api/eventos/proxima-venta')
-        const horaVenta = new Date(response.data.horaInicioVenta)
-        const unaHoraAntes = new Date(horaVenta.getTime() - 60 * 60 * 1000)
-        setColaAbierta(new Date() >= unaHoraAntes && new Date() < horaVenta)
+        const eventResponse = await axios.get(`/api/eventos/${eventoId}`)
+        const fetchedEventoData = eventResponse.data.data
+        setEventoData(fetchedEventoData)
+
+        const saleStartTime = new Date(fetchedEventoData.venta_inicio)
+        const eventDate = new Date(fetchedEventoData.fecha);
+        const eventTimeParts = fetchedEventoData.hora.split(':');
+        eventDate.setHours(parseInt(eventTimeParts[0]), parseInt(eventTimeParts[1]), 0, 0); // Set actual event time
+
+        const now = new Date()
+        const oneHourBeforeSale = new Date(saleStartTime.getTime() - 60 * 60 * 1000)
+
+        const isQueueOpen = (
+            now >= oneHourBeforeSale && 
+            now < eventDate && // Close queue at event start time
+            (fetchedEventoData.vendidos < fetchedEventoData.aforo) // Only if tickets are available
+        );
+        setColaAbierta(isQueueOpen);
+
+        console.log('Cola.jsx - colaAbierta debug:');
+        console.log('  now:', now);
+        console.log('  saleStartTime:', saleStartTime);
+        console.log('  oneHourBeforeSale:', oneHourBeforeSale);
+        console.log('  eventDate (actual event time):', eventDate);
+        console.log('  fetchedEventoData.vendidos:', fetchedEventoData.vendidos);
+        console.log('  fetchedEventoData.aforo:', fetchedEventoData.aforo);
+        console.log('  isQueueOpen (calculated):', isQueueOpen);
+
       } catch (error) {
-        console.error('Error al verificar el estado de la cola:', error)
+        console.error('Error al verificar el estado del evento para la cola:', error.response?.data?.message || error.message)
       }
     }
-    verificarEstadoCola()
-    const intervalo = setInterval(verificarEstadoCola, 60000) // Verificar cada minuto
-    return () => clearInterval(intervalo)
-  }, [])
 
-  // Temporizador de cuenta regresiva cuando es el turno del usuario
+    fetchEventDetailsAndQueueStatus()
+    const interval = setInterval(fetchEventDetailsAndQueueStatus, 60000)
+    return () => clearInterval(interval)
+  }, [eventoId])
+
+  const handleGoBackToEvent = () => {
+    if (eventoId) {
+      navigate(`/eventos/${eventoId}`);
+    } else {
+      navigate('/eventos'); // Fallback if no eventId is present
+    }
+  };
+
+  useEffect(() => {
+    if (queueStatus) {
+      setEnCola(queueStatus.status === 'in_queue_waiting' || queueStatus.status === 'in_turn')
+      setEsMiTurno(queueStatus.status === 'in_turn')
+      setMiTurnoNumero(queueStatus.turno_numero || null)
+    }
+  }, [queueStatus])
+
   useEffect(() => {
     let temporizador
     if (esMiTurno && tiempoRestante > 0) {
@@ -70,29 +146,58 @@ function Cola() {
   }, [esMiTurno, tiempoRestante])
 
   const handleUnirseACola = async () => {
+    if (!eventoId || !isAuthenticated) {
+      alert('Error: ID de evento o autenticación faltante.')
+      return
+    }
     try {
-      await axios.post('/api/cola', {
-        usuarioId: 'id-usuario-actual', // Reemplazar con ID real cuando se implemente la autenticación
-        timestamp: new Date().toISOString()
-      })
+      const response = await axios.post('/api/cola_virtual/join', { evento_id: eventoId })
+      if (response.data.status) {
+        alert('Te has unido a la cola exitosamente!')
       setEnCola(true)
+        setMiTurnoNumero(response.data.data.turno_numero)
+        refetchQueueStatus()
+      } else {
+        alert('Error al unirse a la cola: ' + (response.data.message || 'Error desconocido'))
+      }
     } catch (error) {
-      alert('Error al unirse a la cola. Por favor, intente nuevamente.')
+      console.error('Error al unirse a la cola:', error.response?.data?.message || error.message)
+      alert('Ocurrió un error al unirse a la cola. Por favor, intente de nuevo.')
     }
   }
 
   const handleTiempoExpirado = async () => {
     try {
-      await axios.delete('/api/cola/usuario-actual')
       setEsMiTurno(false)
       setEnCola(false)
+      setMiTurnoNumero(null)
       alert('Tu tiempo ha expirado. Puedes volver a unirte a la cola si lo deseas.')
     } catch (error) {
       console.error('Error al manejar la expiración del tiempo:', error)
     }
   }
 
-  if (isLoading) {
+  if (isLoadingQueueStatus || !eventoId || !isAuthenticated) {
+    if (!isAuthenticated) {
+      return (
+        <Container sx={{ mt: 4 }}>
+          <Alert severity="info">Por favor, inicia sesión para ver tu estado en la cola.</Alert>
+          <Button onClick={() => navigate('/login')} sx={{ mt: 2 }}>
+            Ir a Iniciar Sesión
+          </Button>
+        </Container>
+      )
+    }
+    if (!eventoId) {
+      return (
+        <Container sx={{ mt: 4 }}>
+          <Alert severity="warning">No se especificó un ID de evento para la cola.</Alert>
+          <Button onClick={() => navigate('/eventos')} sx={{ mt: 2 }}>
+            Volver a Eventos
+          </Button>
+        </Container>
+      )
+    }
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
         <CircularProgress />
@@ -100,7 +205,7 @@ function Cola() {
     )
   }
 
-  if (error) {
+  if (errorQueueStatus) {
     return (
       <Alert severity="error" sx={{ mt: 4 }}>
         Error al cargar la información de la cola. Por favor, intente nuevamente más tarde.
@@ -110,13 +215,24 @@ function Cola() {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 5 }}>
-      <Typography variant="h2" component="h1" gutterBottom>
-        Cola Virtual
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <IconButton onClick={handleGoBackToEvent} color="primary" aria-label="regresar">
+          <ArrowBackIcon />
+        </IconButton>
+        <Typography variant="h2" component="h1" gutterBottom sx={{ ml: 1 }}>
+          Cola Virtual {eventoData?.nombre ? `para ${eventoData.nombre}` : ''}
+        </Typography>
+      </Box>
 
-      {!colaAbierta && (
+      {!colaAbierta && !enCola && (
         <Alert severity="info" sx={{ mb: 4 }}>
-          La cola está cerrada actualmente. Se abrirá 1 hora antes del inicio de la venta de boletos.
+          La cola para {eventoData?.nombre || 'este evento'} está cerrada actualmente. Se abrirá 1 hora antes del inicio de la venta de boletos. Venta inicia: {eventoData?.venta_inicio ? new Date(eventoData.venta_inicio).toLocaleString() : 'N/A'}.
+        </Alert>
+      )}
+
+      {enCola && !esMiTurno && (
+         <Alert severity="info" sx={{ mb: 4 }}>
+            Estás en la cola. Tu turno es el número {miTurnoNumero}. Por favor, espera a que sea tu turno.
         </Alert>
       )}
 
@@ -125,24 +241,8 @@ function Cola() {
           <Card>
             <CardContent>
               <Typography variant="h5" gutterBottom>
-                Estado Actual de la Cola
+                Tu Estado en la Cola
               </Typography>
-              <List>
-                {datoCola?.map((entrada, index) => (
-                  <div key={entrada.id}>
-                    <ListItem>
-                      <ListItemText
-                        primary={`Posición ${index + 1}`}
-                        secondary={new Date(entrada.timestamp).toLocaleString()}
-                      />
-                      {index === 0 && (
-                        <Chip label="Actual" color="primary" sx={{ ml: 2 }} />
-                      )}
-                    </ListItem>
-                    {index < datoCola.length - 1 && <Divider />}
-                  </div>
-                ))}
-              </List>
 
               {!enCola && colaAbierta && (
                 <Button
@@ -156,26 +256,28 @@ function Cola() {
                   Unirse a la Cola
                 </Button>
               )}
-            </CardContent>
-          </Card>
-        </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h5" gutterBottom>
-                Información de la Cola
+              {enCola && !esMiTurno && (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Tu posición en la cola:
               </Typography>
-              <Typography paragraph>
-                Longitud Actual: {datoCola?.length || 0} personas
+                  <Typography variant="h4" color="primary">
+                    {miTurnoNumero}
               </Typography>
-              <Typography paragraph>
-                Tiempo Estimado de Espera: {(datoCola?.length || 0) * 5} minutos
+                  <Typography variant="body1" sx={{ mt: 2 }}>
+                    Esperando tu turno. Por favor, mantente en esta página para no perder tu lugar.
               </Typography>
+                </Box>
+              )}
+
               {esMiTurno && (
-                <>
+                <Box sx={{ mt: 3 }}>
                   <Typography variant="h6" color="primary" gutterBottom>
                     ¡Es tu turno!
+                  </Typography>
+                  <Typography paragraph>
+                    Tienes 5 minutos para completar tu compra.
                   </Typography>
                   <LinearProgress
                     variant="determinate"
@@ -185,8 +287,61 @@ function Cola() {
                   <Typography>
                     Tiempo restante: {Math.floor(tiempoRestante / 60)}:{(tiempoRestante % 60).toString().padStart(2, '0')}
                   </Typography>
-                </>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    size="large"
+                    fullWidth
+                    onClick={() => navigate(`/boletos?eventoId=${eventoId}`)}
+                    sx={{ mt: 3 }}
+                  >
+                    Ir a Comprar Boletos
+                  </Button>
+                </Box>
               )}
+
+              {!enCola && !colaAbierta && (
+                <Typography variant="body1" sx={{ mt: 3, color: 'text.secondary' }}>
+                  La cola no está disponible en este momento. 
+                </Typography>
+              )}
+
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h5" gutterBottom>
+                Detalles del Evento
+              </Typography>
+              {eventoData ? (
+                <>
+                  <Typography variant="h6">{eventoData.nombre}</Typography>
+                  <Typography variant="body2" color="text.secondary">Fecha: {new Date(eventoData.fecha).toLocaleDateString()}</Typography>
+                  <Typography variant="body2" color="text.secondary">Hora: {eventoData.hora ? eventoData.hora.substring(0, 5) : 'N/A'}</Typography>
+                  <Typography variant="body2" color="text.secondary">Precio: ${eventoData.precio}</Typography>
+                  <Typography variant="body2" color="text.secondary">Capacidad: {eventoData.aforo}</Typography>
+                  <Typography variant="body2" color="text.secondary">Vendidos: {eventoData.vendidos}</Typography>
+                  <Typography variant="body2" color="text.secondary">Venta Inicia: {new Date(eventoData.venta_inicio).toLocaleString()}</Typography>
+                </>
+              ) : (
+                <CircularProgress size={20} />
+              )}
+            </CardContent>
+          </Card>
+          <Card sx={{ mt: 4 }}>
+            <CardContent>
+              <Typography variant="h5" gutterBottom>
+                Información General de la Cola
+              </Typography>
+              <Typography paragraph>
+                Longitud Actual: {longitudCola !== null ? longitudCola : 'Cargando...'} personas
+              </Typography>
+              <Typography paragraph>
+                Tiempo Estimado de Espera: {longitudCola !== null ? `${longitudCola * 5} minutos` : 'Cargando...'}
+              </Typography>
               <Alert severity="info" sx={{ mt: 2 }}>
                 {colaAbierta ? 
                   'Tienes 5 minutos para completar tu compra cuando sea tu turno.' :
@@ -198,32 +353,26 @@ function Cola() {
       </Grid>
 
       <Dialog
-        open={esMiTurno}
-        onClose={() => {}}
-        disableEscapeKeyDown
-        disableBackdropClick
+        open={esMiTurno && tiempoRestante > 0}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
       >
-        <DialogTitle>¡Es tu turno!</DialogTitle>
+        <DialogTitle id="alert-dialog-title">
+          {"¡Es tu turno para comprar boletos!"}
+        </DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            Tienes 5 minutos para completar tu compra. Tiempo restante: {Math.floor(tiempoRestante / 60)}:{(tiempoRestante % 60).toString().padStart(2, '0')}
+          <DialogContentText id="alert-dialog-description">
+            Tienes {Math.floor(tiempoRestante / 60)}:{Math.round(tiempoRestante % 60).toString().padStart(2, '0')} minutos restantes para completar tu compra.
+            Serás redirigido a la página de compra de boletos.
           </DialogContentText>
-          <LinearProgress
-            variant="determinate"
-            value={(tiempoRestante / 300) * 100}
-            sx={{ mt: 2 }}
-          />
         </DialogContent>
         <DialogActions>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => window.location.href = '/boletos'}
-          >
-            Comprar Boletos Ahora
+          <Button onClick={() => navigate(`/boletos?eventoId=${eventoId}`)} autoFocus>
+            Ir a Comprar Boletos
           </Button>
         </DialogActions>
       </Dialog>
+
     </Container>
   )
 }

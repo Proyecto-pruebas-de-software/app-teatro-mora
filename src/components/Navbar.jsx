@@ -30,14 +30,15 @@ const getPages = (isAuthenticated, isAdmin) => {
     { name: 'Actores', path: '/actores' },
     { name: 'Boletos', path: '/boletos' },
     { name: 'Cola Virtual', path: '/cola' },
-  ]
-
-  const adminPages = [
-    ...authenticatedPages,
     { name: 'Foro', path: '/foro' },
   ]
 
-  if (isAdmin) return adminPages
+  if (isAdmin) {
+    return [
+      ...authenticatedPages,
+      // Any additional admin-specific pages would go here, but Foro is now for all authenticated
+    ];
+  }
   if (isAuthenticated) return authenticatedPages
   return publicPages
 }

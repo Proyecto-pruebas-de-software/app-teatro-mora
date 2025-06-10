@@ -14,6 +14,8 @@ import Actores from './pages/Actores'
 import Boletos from './pages/Boletos'
 import Cola from './pages/Cola'
 import Foro from './pages/Foro'
+import EventForumPage from './pages/EventForumPage'
+import EventDetail from './pages/EventDetail'
 import InicioSesion from './pages/InicioSesion'
 import Registro from './pages/Registro'
 
@@ -57,7 +59,7 @@ function App() {
                 {/* Public Routes */}
                 <Route path="/" element={<Inicio />} />
                 <Route path="/eventos" element={<Eventos />} />
-                <Route path="/eventos/:id" element={<Eventos />} />
+                <Route path="/eventos/:id" element={<EventDetail />} />
                 <Route path="/actores" element={<Actores />} />
                 
                 {/* Auth Routes */}
@@ -98,11 +100,27 @@ function App() {
                 <Route
                   path="/foro"
                   element={
-                    <ProtectedRoute requireAdmin={true}>
+                    <ProtectedRoute>
                       <Foro />
                     </ProtectedRoute>
                   }
                 />
+                <Route
+                  path="/foro/:eventoId"
+                  element={
+                    <ProtectedRoute>
+                      <EventForumPage />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* <Route
+                  path="/foro/evento/:eventoId"
+                  element={
+                    <ProtectedRoute requireAdmin={true}>
+                      <Foro />
+                    </ProtectedRoute>
+                  }
+                /> */}
               </Routes>
             </div>
           </AuthProvider>

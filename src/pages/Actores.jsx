@@ -69,7 +69,7 @@ function Actores() {
               <CardMedia
                 component="img"
                 height="500"
-                image={actor.foto_url || `https://picsum.photos/400/500?random=${actor.id}`}
+                image={`https://placekeanu.com/400/500?random=${actor.id}`}
                 alt={actor.nombre}
                 sx={{ objectFit: 'cover' }}
               />

@@ -1,5 +1,5 @@
 const { Pool } = require('pg');
-const Response = require("../models/response");
+// const Response = require("../models/response"); // Remove Response import as it's not needed in pure queries
 
 // Configuración de la conexión a PostgreSQL
 const pool = new Pool({
@@ -33,8 +33,7 @@ const validatePhotoUrl = (url) => {
 /**
  * Obtiene todos los actores con resumen de biografía
  */
-const getAllActors = async (req, res) => {
-  const response = new Response();
+const getAllActors = async () => {
   try {
     const { rows } = await pool.query(
       `SELECT id, nombre, foto_url, 
@@ -42,24 +41,17 @@ const getAllActors = async (req, res) => {
        FROM actores ORDER BY nombre ASC`
     );
     
-    return res.status(200).json(response.success(200, "Actores obtenidos exitosamente", rows));
+    return rows;
   } catch (error) {
     console.error('Error en getAllActors:', error);
-    return res.status(500).json(response.failure(500, "Error al obtener actores"));
+    throw error;
   }
 };
 
 /**
  * Obtiene un actor por ID
  */
-const getActorById = async (req, res) => {
-  const response = new Response();
-  const id = parseInt(req.params.id);
-
-  if (isNaN(id) || id <= 0) {
-    return res.status(400).json(response.failure(400, "ID debe ser un número entero positivo"));
-  }
-
+const getActorById = async (id) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, nombre, biografia, foto_url 
@@ -68,49 +60,33 @@ const getActorById = async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(404).json(response.failure(404, "Actor no encontrado"));
+      return null;
     }
 
-    return res.status(200).json(response.success(200, "Actor obtenido exitosamente", rows[0]));
+    return rows[0];
   } catch (error) {
     console.error('Error en getActorById:', error);
-    return res.status(500).json(response.failure(500, "Error al obtener el actor"));
+    throw error;
   }
 };
 
 /**
  * Crea un nuevo actor
  */
-const createActor = async (req, res) => {
-  const response = new Response();
-  const { nombre, biografia, foto_url } = req.body;
-
-  // Validaciones mejoradas
-  if (!validateName(nombre)) {
-    return res.status(400).json(response.failure(400, "Nombre inválido. Solo letras, espacios y guiones, máximo 100 caracteres"));
-  }
-
-  if (!validateBiography(biografia)) {
-    return res.status(400).json(response.failure(400, "Biografía inválida. Máximo 2000 caracteres"));
-  }
-
-  if (!validatePhotoUrl(foto_url)) {
-    return res.status(400).json(response.failure(400, "URL de foto inválida. Debe ser una URL válida (http/https) y máximo 255 caracteres"));
-  }
-
+const createActor = async ({ nombre, biografia, foto_url }) => {
   const client = await pool.connect();
   
   try {
     await client.query('BEGIN');
 
     // Verificar nombre duplicado
-    const duplicateCheck = await client.query(
+    const duplicateCheck = await pool.query(
       'SELECT id FROM actores WHERE nombre = $1',
       [nombre]
     );
 
     if (duplicateCheck.rows.length > 0) {
-      return res.status(409).json(response.failure(409, "Ya existe un actor con ese nombre"));
+      throw new Error("Ya existe un actor con ese nombre");
     }
 
     // Insertar nuevo actor
@@ -130,11 +106,11 @@ const createActor = async (req, res) => {
       foto_url: rows[0].foto_url || null
     };
     
-    return res.status(201).json(response.success(201, "Actor creado exitosamente", actorCreado));
+    return actorCreado;
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error en createActor:', error);
-    return res.status(500).json(response.failure(500, "Error al crear el actor"));
+    throw error;
   } finally {
     client.release();
   }
@@ -143,52 +119,31 @@ const createActor = async (req, res) => {
 /**
  * Actualiza un actor existente
  */
-const updateActor = async (req, res) => {
-  const response = new Response();
-  const id = parseInt(req.params.id);
-  const { nombre, biografia, foto_url } = req.body;
-
-  if (isNaN(id) || id <= 0) {
-    return res.status(400).json(response.failure(400, "ID debe ser un número entero positivo"));
-  }
-
-  // Validaciones
-  if (nombre && !validateName(nombre)) {
-    return res.status(400).json(response.failure(400, "Nombre inválido"));
-  }
-
-  if (biografia && !validateBiography(biografia)) {
-    return res.status(400).json(response.failure(400, "Biografía inválida"));
-  }
-
-  if (foto_url && !validatePhotoUrl(foto_url)) {
-    return res.status(400).json(response.failure(400, "URL de foto inválida"));
-  }
-
+const updateActor = async (id, { nombre, biografia, foto_url }) => {
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
     // Verificar existencia del actor
-    const actorCheck = await client.query(
+    const actorCheck = await pool.query(
       'SELECT id FROM actores WHERE id = $1',
       [id]
     );
 
     if (actorCheck.rows.length === 0) {
-      return res.status(404).json(response.failure(404, "Actor no encontrado"));
+      throw new Error("Actor no encontrado");
     }
 
     // Verificar nombre duplicado
     if (nombre) {
-      const duplicateCheck = await client.query(
+      const duplicateCheck = await pool.query(
         'SELECT id FROM actores WHERE nombre = $1 AND id != $2',
         [nombre, id]
       );
 
       if (duplicateCheck.rows.length > 0) {
-        return res.status(409).json(response.failure(409, "Ya existe otro actor con ese nombre"));
+        throw new Error("Ya existe otro actor con ese nombre");
       }
     }
 
@@ -199,24 +154,17 @@ const updateActor = async (req, res) => {
            biografia = COALESCE($2, biografia),
            foto_url = COALESCE($3, foto_url)
        WHERE id = $4
-       RETURNING id, nombre, biografia, foto_url`,  // Incluir biografia en el RETURNING
+       RETURNING id, nombre, biografia, foto_url`, 
       [nombre || null, biografia || null, foto_url || null, id]
     );
 
     await client.query('COMMIT');
     
-    const actorActualizado = {
-      id: rows[0].id,
-      nombre: rows[0].nombre,
-      biografia: rows[0].biografia || null,
-      foto_url: rows[0].foto_url || null
-    };
-    
-    return res.status(200).json(response.success(200, "Actor actualizado exitosamente", actorActualizado));
+    return rows[0];
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error en updateActor:', error);
-    return res.status(500).json(response.failure(500, "Error al actualizar el actor"));
+    throw error;
   } finally {
     client.release();
   }
@@ -225,42 +173,35 @@ const updateActor = async (req, res) => {
 /**
  * Elimina un actor
  */
-const deleteActor = async (req, res) => {
-  const response = new Response();
-  const id = parseInt(req.params.id);
-
-  if (isNaN(id) || id <= 0) {
-    return res.status(400).json(response.failure(400, "ID debe ser un número entero positivo"));
-  }
-
+const deleteActor = async (id) => {
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    // Verificar existencia del actor
-    const actorCheck = await client.query(
+    // Verificar existencia
+    const actorCheck = await pool.query(
       'SELECT id FROM actores WHERE id = $1',
       [id]
     );
 
     if (actorCheck.rows.length === 0) {
-      return res.status(404).json(response.failure(404, "Actor no encontrado"));
+      throw new Error("Actor no encontrado");
     }
 
-    // Eliminar actor
-    const { rows } = await client.query(
-      'DELETE FROM actores WHERE id = $1 RETURNING id, nombre',
+    // Eliminar
+    const { rowCount } = await client.query(
+      'DELETE FROM actores WHERE id = $1',
       [id]
     );
 
     await client.query('COMMIT');
-    
-    return res.status(200).json(response.success(200, "Actor eliminado exitosamente", rows[0]));
+
+    return rowCount > 0; // Return true if deleted, false otherwise
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error en deleteActor:', error);
-    return res.status(500).json(response.failure(500, "Error al eliminar el actor"));
+    throw error;
   } finally {
     client.release();
   }
@@ -271,7 +212,7 @@ const clearActorsForTesting = async () => {
   if (process.env.NODE_ENV !== 'test') return;
   
   try {
-    await pool.query("DELETE FROM actores WHERE nombre LIKE 'Actor%'");
+    await pool.query("DELETE FROM actores WHERE nombre LIKE '%test%'");
   } catch (error) {
     console.error('Error al limpiar actores para testing:', error);
     throw error;
@@ -279,16 +220,14 @@ const clearActorsForTesting = async () => {
 };
 
 module.exports = {
-  getAll: getAllActors,
-  getById: getActorById,
-  create: createActor,
-  update: updateActor,
-  delete: deleteActor,
-  pool,
+  getAllActors,
+  getActorById,
+  createActor,
+  updateActor,
+  deleteActor,
   clearActorsForTesting,
-  _test: {
-    validateName,
-    validateBiography,
-    validatePhotoUrl
-  }
+  validateName,        // Export validation functions
+  validateBiography,
+  validatePhotoUrl,
+  pool
 };

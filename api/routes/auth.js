@@ -1,191 +1,111 @@
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { Pool } = require('pg');
 const Response = require('../models/response');
+const { verifyToken } = require('../middleware/auth');
+const usuariosQueries = require('../queries/queries_usuarios');
+const jwt = require('jsonwebtoken');
 
-// Database connection
-const pool = new Pool({
-    user: process.env.DB_USER,
-    host: process.env.DB_HOST,
-    database: process.env.DB_NAME,
-    password: process.env.DB_PASSWORD,
-    port: process.env.DB_PORT,
-});
-
-// Validation helpers
-const validateEmail = (email) => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email) && email.length <= 100;
-};
-
-const validatePassword = (password) => {
-    return password.length >= 8;
-};
-
-// Middleware to verify JWT token
-const verifyToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-        return res.status(401).json(new Response().failure(401, 'Access token not found'));
-    }
-
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = {
-            id: decoded.id,
-            email: decoded.email,
-            role: decoded.role
-        };
-        next();
-    } catch (error) {
-        return res.status(403).json(new Response().failure(403, 'Invalid or expired token'));
-    }
-};
-
-// Register new user
-router.post('/register', async (req, res) => {
+// Registrar nuevo usuario
+router.post('/register', async (req, res, next) => {
     const response = new Response();
     const { nombre, email, password } = req.body;
 
-    // Validate input
+    // Validación de entrada (already handled in queries, but can also be here for earlier feedback)
     if (!nombre || !email || !password) {
-        return res.status(400).json(response.failure(400, 'All fields are required'));
+        const error = new Error('Todos los campos son requeridos');
+        error.statusCode = 400;
+        return next(error);
     }
-
-    if (!validateEmail(email)) {
-        return res.status(400).json(response.failure(400, 'Invalid email format'));
+    if (!usuariosQueries.validateName(nombre)) {
+        const error = new Error("Nombre inválido (solo letras y espacios, máx 100 caracteres)");
+        error.statusCode = 400;
+        return next(error);
     }
-
-    if (!validatePassword(password)) {
-        return res.status(400).json(response.failure(400, 'Password must be at least 8 characters long'));
+    if (!usuariosQueries.validateEmail(email)) {
+        const error = new Error("Email inválido o demasiado largo (máx 100 caracteres)");
+        error.statusCode = 400;
+        return next(error);
+    }
+    if (!usuariosQueries.validatePassword(password)) {
+        const error = new Error("La contraseña debe tener 8+ caracteres, 1 mayúscula, 1 número y 1 carácter especial");
+        error.statusCode = 400;
+        return next(error);
     }
 
     try {
-        // Check if email already exists
-        const emailCheck = await pool.query(
-            'SELECT id FROM usuarios WHERE email = $1',
-            [email]
-        );
+        const newUser = await usuariosQueries.createUsuario({ nombre, email, password, rol: 'cliente' });
 
-        if (emailCheck.rows.length > 0) {
-            return res.status(409).json(response.failure(409, 'Email already registered'));
-        }
-
-        // Hash password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        // Create user
-        const result = await pool.query(
-            'INSERT INTO usuarios (nombre, email, password, rol) VALUES ($1, $2, $3, $4) RETURNING id, nombre, email, rol',
-            [nombre, email, hashedPassword, 'user']
-        );
-
-        const user = result.rows[0];
+        // Generar JWT para el usuario recién registrado
         const token = jwt.sign(
-            { id: user.id, email: user.email, role: user.rol },
+            { id: newUser.id, email: newUser.email, role: newUser.role }, 
             process.env.JWT_SECRET,
-            { expiresIn: '24h' }
+            { expiresIn: '1h' }
         );
 
-        return res.status(201).json(response.success(201, 'User registered successfully', {
-            token,
-            user: {
-                id: user.id,
-                nombre: user.nombre,
-                email: user.email,
-                role: user.rol
-            }
-        }));
+        return res.status(200).json(response.success(200, "Registro y inicio de sesión exitoso", { token, user: newUser }));
+
     } catch (error) {
-        console.error('Registration error:', error);
-        return res.status(500).json(response.failure(500, 'Error registering user'));
+        console.error('Error en la ruta de registro (auth.js):', error);
+        next(error);
     }
 });
 
-// Login user
-router.post('/login', async (req, res) => {
+// Iniciar sesión de usuario
+router.post('/login', async (req, res, next) => {
     const response = new Response();
     const { email, password } = req.body;
 
     if (!email || !password) {
-        return res.status(400).json(response.failure(400, 'Email and password are required'));
+        const error = new Error('Email y contraseña son requeridos');
+        error.statusCode = 400;
+        return next(error);
     }
 
     try {
-        // Find user by email
-        const result = await pool.query(
-            'SELECT * FROM usuarios WHERE email = $1',
-            [email]
-        );
+        const user = await usuariosQueries.login(email, password);
 
-        if (result.rows.length === 0) {
-            return res.status(401).json(response.failure(401, 'Invalid credentials'));
+        if (!user) {
+            const error = new Error("Credenciales inválidas");
+            error.statusCode = 401; // Unauthorized
+            return next(error);
         }
 
-        const user = result.rows[0];
-
-        // Verify password
-        const validPassword = await bcrypt.compare(password, user.password);
-        if (!validPassword) {
-            return res.status(401).json(response.failure(401, 'Invalid credentials'));
-        }
-
-        // Generate token
+        // Generar JWT
         const token = jwt.sign(
-            { id: user.id, email: user.email, role: user.rol },
+            { id: user.id, email: user.email, role: user.role },
             process.env.JWT_SECRET,
-            { expiresIn: '24h' }
+            { expiresIn: '1h' }
         );
 
-        return res.status(200).json(response.success(200, 'Login successful', {
-            token,
-            user: {
-                id: user.id,
-                nombre: user.nombre,
-                email: user.email,
-                role: user.rol
-            }
-        }));
+        return res.status(200).json(response.success(200, "Inicio de sesión exitoso", { token, user }));
+
     } catch (error) {
-        console.error('Login error:', error);
-        return res.status(500).json(response.failure(500, 'Error during login'));
+        console.error('Error en la ruta de inicio de sesión (auth.js):', error);
+        next(error);
     }
 });
 
-// Get current user
-router.get('/me', verifyToken, async (req, res) => {
+// Obtener usuario actual
+router.get('/me', verifyToken, async (req, res, next) => {
     const response = new Response();
     try {
-        const result = await pool.query(
-            'SELECT id, nombre, email, rol FROM usuarios WHERE id = $1',
-            [req.user.id]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(404).json(response.failure(404, 'User not found'));
+        const user = await usuariosQueries.getUsuarioById(req.user.id);
+        if (!user) {
+            const error = new Error("Usuario no encontrado.");
+            error.statusCode = 404;
+            return next(error);
         }
-
-        return res.status(200).json(response.success(200, 'User retrieved successfully', {
-            id: result.rows[0].id,
-            nombre: result.rows[0].nombre,
-            email: result.rows[0].email,
-            role: result.rows[0].rol
-        }));
+        return res.status(200).json(response.success(200, "Datos de usuario obtenidos exitosamente", user));
     } catch (error) {
-        console.error('Get user error:', error);
-        return res.status(500).json(response.failure(500, 'Error retrieving user'));
+        console.error('Error en la ruta /me (auth.js):', error);
+        next(error);
     }
 });
 
-// Logout (optional - client-side can handle token removal)
+// Cerrar sesión (opcional - el lado del cliente puede manejar la eliminación del token)
 router.post('/logout', (req, res) => {
     const response = new Response();
-    return res.status(200).json(response.success(200, 'Logged out successfully'));
+    return res.status(200).json(response.success(200, 'Sesión cerrada exitosamente'));
 });
 
 module.exports = router; 

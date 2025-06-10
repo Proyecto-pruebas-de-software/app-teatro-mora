@@ -1,109 +1,207 @@
 const express = require('express');
 const router = express.Router();
 const Response = require('../models/response');
-const jwt = require('jsonwebtoken');
-const mensajesQueries = require('../queries/queries_mensajesforo');
+const { verifyToken } = require('../middleware/auth');
+const mensajesForoQueries = require('../queries/queries_mensajesforo');
 
-// Middleware to verify JWT token
-const verifyToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-        return res.status(401).json(new Response().failure(401, 'Token no encontrado'));
-    }
-
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = {
-            id: decoded.id,
-            email: decoded.email,
-            role: decoded.role
-        };
-        next();
-    } catch (error) {
-        return res.status(403).json(new Response().failure(403, 'Token inválido o expirado'));
-    }
-};
-
-// Get all messages
-router.get('/', verifyToken, mensajesQueries.getAll);
-
-// Create new message
-router.post('/', verifyToken, (req, res) => {
-    // Transform the request body to match the query expectations
-    req.body = {
-        usuario_id: req.user.id,
-        evento_id: req.body.eventoId,
-        mensaje: req.body.contenido
-    };
-    mensajesQueries.create(req, res);
-});
-
-// Update message
-router.put('/:id', verifyToken, async (req, res) => {
-    const message = await mensajesQueries.pool.query('SELECT * FROM mensajes_foro WHERE id = $1', [req.params.id]);
-    
-    // Check permissions
-    if (message.rows.length > 0 && 
-        (message.rows[0].usuario_id === req.user.id || req.user.role === 'admin')) {
-        // Transform the request body
-        req.body = { mensaje: req.body.contenido };
-        mensajesQueries.update(req, res);
-    } else {
-        return res.status(403).json(new Response().failure(403, 'No autorizado para editar este mensaje'));
-    }
-});
-
-// Delete message
-router.delete('/:id', verifyToken, async (req, res) => {
-    const message = await mensajesQueries.pool.query('SELECT * FROM mensajes_foro WHERE id = $1', [req.params.id]);
-    
-    // Check permissions
-    if (message.rows.length > 0 && 
-        (message.rows[0].usuario_id === req.user.id || req.user.role === 'admin')) {
-        mensajesQueries.delete(req, res);
-    } else {
-        return res.status(403).json(new Response().failure(403, 'No autorizado para eliminar este mensaje'));
-    }
-});
-
-// Report message
-router.post('/:id/reportar', verifyToken, async (req, res) => {
+// Obtener todos los mensajes (foro general o por evento_id o por parent_id)
+router.get('/', async (req, res, next) => {
     const response = new Response();
-    const { id } = req.params;
-    const { motivo } = req.body;
+    const { evento_id, parent_id } = req.query;
 
-    if (!motivo?.trim()) {
-        return res.status(400).json(response.failure(400, 'El motivo es requerido'));
+    try {
+        let messages;
+        if (parent_id) {
+            const parsedParentId = parseInt(parent_id);
+            if (isNaN(parsedParentId)) {
+                const error = new Error("Parent ID debe ser un número válido");
+                error.statusCode = 400;
+                return next(error);
+            }
+            messages = await mensajesForoQueries.getMensajesForo(null, parsedParentId);
+        } else if (evento_id) {
+            const parsedEventoId = parseInt(evento_id);
+            if (isNaN(parsedEventoId)) {
+                const error = new Error("ID de evento debe ser un número válido");
+                error.statusCode = 400;
+                return next(error);
+            }
+            messages = await mensajesForoQueries.getMensajesForo(parsedEventoId);
+        } else {
+            messages = await mensajesForoQueries.getMensajesForo();
+        }
+        return res.status(200).json(response.success(200, "Mensajes obtenidos exitosamente", messages));
+    } catch (error) {
+        console.error('Error en ruta GET /api/mensajes:', error);
+        next(error);
+    }
+});
+
+// Obtener respuestas para un mensaje específico (como parámetro de ruta)
+router.get('/replies/:parent_id', async (req, res, next) => {
+    const response = new Response();
+    const parent_id = parseInt(req.params.parent_id);
+
+    if (isNaN(parent_id)) {
+        const error = new Error("Parent ID debe ser un número válido");
+        error.statusCode = 400;
+        return next(error);
     }
 
     try {
-        const message = await mensajesQueries.pool.query('SELECT * FROM mensajes_foro WHERE id = $1', [id]);
-        
-        if (message.rows.length === 0) {
-            return res.status(404).json(response.failure(404, 'Mensaje no encontrado'));
-        }
-
-        // Check if user has already reported this message
-        const existingReport = await mensajesQueries.pool.query(
-            'SELECT * FROM reportes_mensajes WHERE mensaje_id = $1 AND usuario_id = $2',
-            [id, req.user.id]
-        );
-
-        if (existingReport.rows.length > 0) {
-            return res.status(400).json(response.failure(400, 'Ya has reportado este mensaje'));
-        }
-
-        await mensajesQueries.pool.query(
-            'INSERT INTO reportes_mensajes (mensaje_id, usuario_id, motivo, fecha) VALUES ($1, $2, $3, $4)',
-            [id, req.user.id, motivo, new Date()]
-        );
-
-        return res.json(response.success(200, 'Mensaje reportado exitosamente'));
+        const messages = await mensajesForoQueries.getMensajesForo(null, parent_id);
+        return res.status(200).json(response.success(200, "Respuestas obtenidas exitosamente", messages));
     } catch (error) {
-        console.error('Error al reportar mensaje:', error);
-        return res.status(500).json(response.failure(500, 'Error al reportar mensaje'));
+        console.error('Error en ruta GET /api/mensajes/replies/:parent_id:', error);
+        next(error);
+    }
+});
+
+// Obtener mensajes para un evento específico (como parámetro de ruta)
+router.get('/:evento_id', async (req, res, next) => {
+    const response = new Response();
+    const evento_id = parseInt(req.params.evento_id);
+
+    if (isNaN(evento_id)) {
+        const error = new Error("ID de evento debe ser un número válido");
+        error.statusCode = 400;
+        return next(error);
+    }
+
+    try {
+        const messages = await mensajesForoQueries.getMensajesForo(evento_id);
+        return res.status(200).json(response.success(200, "Mensajes del evento obtenidos exitosamente", messages));
+    } catch (error) {
+        console.error('Error en ruta GET /api/mensajes/:evento_id:', error);
+        next(error);
+    }
+});
+
+// Publicar nuevo mensaje
+router.post('/', verifyToken, async (req, res, next) => {
+    const response = new Response();
+    const { evento_id, mensaje, parent_mensaje_id } = req.body;
+    const usuario_id = req.user.id;
+
+    if (!mensaje) {
+        const error = new Error("El mensaje no puede estar vacío");
+        error.statusCode = 400;
+        return next(error);
+    }
+    if (!mensajesForoQueries.validateMensaje(mensaje)) {
+        const error = new Error("El mensaje debe tener entre 5 y 500 caracteres");
+        error.statusCode = 400;
+        return next(error);
+    }
+
+    try {
+        // Validar claves foráneas a nivel de ruta
+        const fkValidas = await mensajesForoQueries.validateForeignKeys(usuario_id, evento_id);
+        if (!fkValidas) {
+            const error = new Error("Usuario o evento no existen");
+            error.statusCode = 404;
+            return next(error);
+        }
+
+        const newMessage = await mensajesForoQueries.createMensajeForo({ usuario_id, evento_id, mensaje, parent_mensaje_id });
+        return res.status(201).json(response.success(201, "Mensaje de foro creado exitosamente", newMessage));
+    } catch (error) {
+        console.error('Error en ruta POST /api/mensajes:', error);
+        next(error);
+    }
+});
+
+// PUT actualizar mensaje
+router.put('/:id', verifyToken, async (req, res, next) => {
+    const response = new Response();
+    const id = parseInt(req.params.id);
+    const { mensaje } = req.body;
+
+    if (isNaN(id)) {
+        const error = new Error("ID debe ser un número válido");
+        error.statusCode = 400;
+        return next(error);
+    }
+
+    if (!mensaje) {
+        const error = new Error("El mensaje no puede estar vacío");
+        error.statusCode = 400;
+        return next(error);
+    }
+    if (!mensajesForoQueries.validateMensaje(mensaje)) {
+        const error = new Error("El mensaje debe tener entre 5 y 500 caracteres");
+        error.statusCode = 400;
+        return next(error);
+    }
+
+    try {
+        const isOwner = await mensajesForoQueries.checkMessageOwnership(id, req.user.id, req.user.role);
+        if (!isOwner) {
+            const error = new Error("No autorizado para actualizar este mensaje");
+            error.statusCode = 403;
+            return next(error);
+        }
+
+        const updatedMessage = await mensajesForoQueries.updateMensajeForo(id, { mensaje });
+        return res.status(200).json(response.success(200, "Mensaje de foro actualizado exitosamente", updatedMessage));
+    } catch (error) {
+        console.error('Error en ruta PUT /api/mensajes/:id:', error);
+        next(error);
+    }
+});
+
+// Eliminar mensaje
+router.delete('/:id', verifyToken, async (req, res, next) => {
+    const response = new Response();
+    const id = parseInt(req.params.id);
+
+    if (isNaN(id)) {
+        const error = new Error("ID debe ser un número válido");
+        error.statusCode = 400;
+        return next(error);
+    }
+
+    try {
+        const isOwner = await mensajesForoQueries.checkMessageOwnership(id, req.user.id, req.user.role);
+        if (!isOwner) {
+            const error = new Error("No autorizado para eliminar este mensaje");
+            error.statusCode = 403;
+            return next(error);
+        }
+
+        await mensajesForoQueries.deleteMensajeForo(id);
+        return res.status(200).json(response.success(200, "Mensaje de foro eliminado exitosamente"));
+    } catch (error) {
+        console.error('Error en ruta DELETE /api/mensajes/:id:', error);
+        next(error);
+    }
+});
+
+// Reportar mensaje
+router.post('/reportar/:id', verifyToken, async (req, res, next) => {
+    const response = new Response();
+    const messageId = parseInt(req.params.id);
+    const { motivo } = req.body;
+    const usuario_id = req.user.id;
+
+    if (isNaN(messageId)) {
+        const error = new Error("ID de mensaje debe ser un número válido");
+        error.statusCode = 400;
+        return next(error);
+    }
+
+    if (!motivo) {
+        const error = new Error("El motivo del reporte no puede estar vacío");
+        error.statusCode = 400;
+        return next(error);
+    }
+
+    try {
+        await mensajesForoQueries.reportarMensaje(messageId, usuario_id, motivo);
+        return res.status(200).json(response.success(200, "Mensaje reportado exitosamente"));
+    } catch (error) {
+        console.error('Error en ruta POST /api/mensajes/reportar/:id:', error);
+        next(error);
     }
 });
 

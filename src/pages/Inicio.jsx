@@ -1,5 +1,5 @@
 import { Link as RouterLink } from 'react-router-dom'
-import { Container, Typography, Grid, Card, CardContent, Button, Box, Skeleton } from '@mui/material'
+import { Container, Typography, Grid, Card, CardContent, Button, Box, Skeleton, CardActions } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 
@@ -57,7 +57,7 @@ function Inicio() {
             Disfruta de la magia del teatro en el corazón de la ciudad
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 4 }}>
-            <Button
+            {/* <Button
               component={RouterLink}
               to="/eventos"
               variant="contained"
@@ -65,7 +65,7 @@ function Inicio() {
               size="large"
             >
               Ver Eventos
-            </Button>
+            </Button> */}
             <Button
               component={RouterLink}
               to="/boletos"
@@ -92,14 +92,14 @@ function Inicio() {
         </Typography>
         <Grid container spacing={4}>
           {isLoading ? (
-            // Loading skeleton
+            // Esqueleto de carga
             [...Array(3)].map((_, index) => (
               <Grid item key={`skeleton-${index}`} xs={12} sm={6} md={4}>
                 <LoadingEventCard />
               </Grid>
             ))
           ) : eventos && eventos.length > 0 ? (
-            // Real events
+            // Eventos reales
             eventos.map((evento) => (
               <Grid item key={evento.id} xs={12} sm={6} md={4}>
                 <Card
@@ -126,25 +126,22 @@ function Inicio() {
                         ? `${evento.descripcion.substring(0, 100)}...` 
                         : evento.descripcion}
                     </Typography>
-                    <Box sx={{ mt: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="h6" color="primary">
-                        ${evento.precio}
-                      </Typography>
-                      <Button
-                        component={RouterLink}
-                        to={`/eventos/${evento.id}`}
-                        variant="contained"
-                        size="small"
-                      >
-                        Más Información
-                      </Button>
-                    </Box>
                   </CardContent>
+                  <CardActions sx={{ mt: 'auto' }}>
+                    <Button
+                      component={RouterLink}
+                      to={`/eventos/${evento.id}`}
+                      variant="contained"
+                      size="small"
+                    >
+                      Más Información
+                    </Button>
+                  </CardActions>
                 </Card>
               </Grid>
             ))
           ) : (
-            // No events found
+            // No se encontraron eventos
             <Grid item xs={12}>
               <Typography variant="h6" align="center" color="text.secondary">
                 No hay próximos eventos programados

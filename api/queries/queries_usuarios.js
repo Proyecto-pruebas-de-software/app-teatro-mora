@@ -1,5 +1,7 @@
 const { Pool } = require('pg');
-const Response = require("../models/response");
+// const Response = require("../models/response"); // Remove Response import
+const bcrypt = require('bcrypt');
+// const jwt = require('jsonwebtoken'); // Remove jwt import
 
 // Configuración de la conexión a PostgreSQL
 const pool = new Pool({
@@ -41,33 +43,27 @@ const checkEmailUnico = async (email, userId = null) => {
         return result.rows.length === 0;
     } catch (error) {
         console.error('Error verificando email único:', error);
-        return false;
+        throw error;
     }
 };
 
 // CRUD Usuarios
-const getUsuarios = async (req, res) => {
-    const response = new Response();
+const getUsuarios = async () => {
     try {
         const results = await pool.query(
             'SELECT id, nombre, email, rol FROM usuarios ORDER BY id ASC'
         );
         
-        return res.status(200).json(response.success(200, "Usuarios obtenidos exitosamente", results.rows));
+        // Map 'rol' to 'role' for each user
+        const usersWithRole = results.rows.map(user => ({ ...user, role: user.rol }));
+        return usersWithRole;
     } catch (error) {
         console.error('Error en getUsuarios:', error);
-        return res.status(500).json(response.failure(500, "Error al obtener usuarios"));
+        throw error; // Throw error for route handler to catch
     }
 };
 
-const getUsuarioById = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
+const getUsuarioById = async (id) => {
     try {
         const results = await pool.query(
             'SELECT id, nombre, email, rol FROM usuarios WHERE id = $1', 
@@ -75,35 +71,39 @@ const getUsuarioById = async (req, res) => {
         );
 
         if (results.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Usuario no encontrado"));
+            return null; // Return null if not found
         }
 
-        return res.status(200).json(response.success(200, "Usuario obtenido exitosamente", results.rows[0]));
+        // Map 'rol' to 'role' for the single user
+        const userWithRole = { ...results.rows[0], role: results.rows[0].rol };
+        return userWithRole;
     } catch (error) {
         console.error('Error en getUsuarioById:', error);
-        return res.status(500).json(response.failure(500, "Error al obtener el usuario"));
+        throw error; // Throw error for route handler to catch
     }
 };
 
-const createUsuario = async (req, res) => {
-    const response = new Response();
-    const { nombre, email, password, rol = 'cliente' } = req.body;
-
+const createUsuario = async ({ nombre, email, password, rol = 'cliente' }) => {
     // Validaciones básicas
     if (!nombre || !email || !password) {
-        return res.status(400).json(response.failure(400, "Faltan campos requeridos: nombre, email o password"));
+        const error = new Error("Faltan campos requeridos: nombre, email o password");
+        error.statusCode = 400;
+        throw error;
     }
-
     if (!validateName(nombre)) {
-        return res.status(400).json(response.failure(400, "Nombre inválido (solo letras y espacios, máx 100 caracteres)"));
+        const error = new Error("Nombre inválido (solo letras y espacios, máx 100 caracteres)");
+        error.statusCode = 400;
+        throw error;
     }
-
     if (!validateEmail(email)) {
-        return res.status(400).json(response.failure(400, "Email inválido o demasiado largo (máx 100 caracteres)"));
+        const error = new Error("Email inválido o demasiado largo (máx 100 caracteres)");
+        error.statusCode = 400;
+        throw error;
     }
-
     if (!validatePassword(password)) {
-        return res.status(400).json(response.failure(400, "La contraseña debe tener 8+ caracteres, 1 mayúscula, 1 número y 1 carácter especial"));
+        const error = new Error("La contraseña debe tener 8+ caracteres, 1 mayúscula, 1 número y 1 carácter especial");
+        error.statusCode = 400;
+        throw error;
     }
 
     const client = await pool.connect();
@@ -114,8 +114,14 @@ const createUsuario = async (req, res) => {
         // Verificar email único
         const emailUnico = await checkEmailUnico(email);
         if (!emailUnico) {
-            return res.status(409).json(response.failure(409, "El email ya está registrado"));
+            const error = new Error("El email ya está registrado");
+            error.statusCode = 409;
+            throw error;
         }
+
+        // Hashear contraseña
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
 
         // Crear usuario
         const query = `
@@ -127,61 +133,69 @@ const createUsuario = async (req, res) => {
         const results = await client.query(query, [
             nombre, 
             email, 
-            password,
+            hashedPassword,
             rol
         ]);
 
         await client.query('COMMIT');
         
-        return res.status(201).json(response.success(201, "Usuario creado exitosamente", results.rows[0]));
+        // Map rol from DB to role for frontend in createUsuario response
+        const createdUser = results.rows[0];
+        return { 
+            id: createdUser.id, 
+            nombre: createdUser.nombre, 
+            email: createdUser.email, 
+            role: createdUser.rol 
+        }; // Return user data
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en createUsuario:', error);
-        return res.status(500).json(response.failure(500, "Error al crear el usuario"));
+        // Attach a default status code if not already present, for the error handler
+        if (!error.statusCode) error.statusCode = 500;
+        throw error; // Re-throw error for route handler
     } finally {
         client.release();
     }
 };
 
-const updateUsuario = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-    const { nombre, email, rol } = req.body;
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
-    // Validaciones
-    if (nombre && !validateName(nombre)) {
-        return res.status(400).json(response.failure(400, "Nombre inválido"));
-    }
-
-    if (email && !validateEmail(email)) {
-        return res.status(400).json(response.failure(400, "Email inválido"));
-    }
-
+const updateUsuario = async (id, { nombre, email, rol }) => {
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
         // Verificar existencia del usuario
-        const usuarioExistente = await client.query(
+        const usuarioExistente = await pool.query(
             'SELECT * FROM usuarios WHERE id = $1',
             [id]
         );
 
         if (usuarioExistente.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Usuario no encontrado"));
+            const error = new Error("Usuario no encontrado");
+            error.statusCode = 404;
+            throw error;
         }
 
         // Verificar email único si se actualiza
         if (email) {
             const emailUnico = await checkEmailUnico(email, id);
             if (!emailUnico) {
-                return res.status(409).json(response.failure(409, "El email ya está registrado por otro usuario"));
+                const error = new Error("El email ya está registrado por otro usuario");
+                error.statusCode = 409;
+                throw error;
             }
+        }
+
+        // Validaciones
+        if (nombre && !validateName(nombre)) {
+            const error = new Error("Nombre inválido");
+            error.statusCode = 400;
+            throw error;
+        }
+        if (email && !validateEmail(email)) {
+            const error = new Error("Email inválido");
+            error.statusCode = 400;
+            throw error;
         }
 
         // Actualizar
@@ -203,47 +217,45 @@ const updateUsuario = async (req, res) => {
 
         await client.query('COMMIT');
         
-        return res.status(200).json(response.success(200, "Usuario actualizado exitosamente", results.rows[0]));
+        return { ...results.rows[0], role: results.rows[0].rol }; // Return updated user data
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en updateUsuario:', error);
-        return res.status(500).json(response.failure(500, "Error al actualizar el usuario"));
+        if (!error.statusCode) error.statusCode = 500;
+        throw error; // Re-throw error
     } finally {
         client.release();
     }
 };
 
-const deleteUsuario = async (req, res) => {
-    const response = new Response();
-    const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
-        return res.status(400).json(response.failure(400, "ID debe ser un número válido"));
-    }
-
+const deleteUsuario = async (id) => {
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
         // Verificar existencia
-        const usuarioExistente = await client.query(
+        const usuarioExistente = await pool.query(
             'SELECT id FROM usuarios WHERE id = $1',
             [id]
         );
 
         if (usuarioExistente.rows.length === 0) {
-            return res.status(404).json(response.failure(404, "Usuario no encontrado"));
+            const error = new Error("Usuario no encontrado");
+            error.statusCode = 404;
+            throw error;
         }
 
         // Verificar si tiene boletos asociados
-        const boletosAsociados = await client.query(
+        const boletosAsociados = await pool.query(
             'SELECT id FROM boletos WHERE usuario_id = $1 LIMIT 1',
             [id]
         );
 
         if (boletosAsociados.rows.length > 0) {
-            return res.status(403).json(response.failure(403, "No se puede eliminar, el usuario tiene boletos asociados"));
+            const error = new Error("No se puede eliminar, el usuario tiene boletos asociados");
+            error.statusCode = 403;
+            throw error;
         }
 
         // Eliminar
@@ -254,22 +266,54 @@ const deleteUsuario = async (req, res) => {
 
         await client.query('COMMIT');
         
-        return res.status(200).json(response.success(200, "Usuario eliminado exitosamente", results.rows[0]));
+        return results.rows[0]; // Return deleted user data
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error en deleteUsuario:', error);
-        return res.status(500).json(response.failure(500, "Error al eliminar el usuario"));
+        if (!error.statusCode) error.statusCode = 500;
+        throw error; // Re-throw error
     } finally {
         client.release();
+    }
+};
+
+const login = async (email, password) => {
+    try {
+        const results = await pool.query(
+            'SELECT id, nombre, email, password, rol FROM usuarios WHERE email = $1',
+            [email]
+        );
+
+        if (results.rows.length === 0) {
+            return null; // User not found
+        }
+
+        const user = results.rows[0];
+        const passwordMatch = await bcrypt.compare(password, user.password);
+
+        if (!passwordMatch) {
+            return null; // Incorrect password
+        }
+
+        // Return user object with 'role' mapped from 'rol'
+        return { 
+            id: user.id, 
+            nombre: user.nombre, 
+            email: user.email, 
+            role: user.rol 
+        };
+
+    } catch (error) {
+        console.error('Error en login:', error);
+        throw error; // Re-throw for route handler to catch
     }
 };
 
 // Para testing - limpia la tabla de usuarios
 const clearUsuariosForTesting = async () => {
     if (process.env.NODE_ENV !== 'test') return;
-    
     try {
-        await pool.query("DELETE FROM usuarios WHERE email LIKE '%@test.com'");
+        await pool.query("DELETE FROM usuarios WHERE email LIKE '%test%'");
     } catch (error) {
         console.error('Error al limpiar usuarios para testing:', error);
         throw error;
@@ -277,17 +321,16 @@ const clearUsuariosForTesting = async () => {
 };
 
 module.exports = {
-    getAll: getUsuarios,
-    getById: getUsuarioById,
-    create: createUsuario,
-    update: updateUsuario,
-    delete: deleteUsuario,
+    getUsuarios,
+    getUsuarioById,
+    createUsuario,
+    updateUsuario,
+    deleteUsuario,
+    login,
+    validateEmail,
+    validatePassword,
+    validateName,
+    checkEmailUnico,
     pool,
-    clearUsuariosForTesting,
-    _test: {
-        validateEmail,
-        validatePassword,
-        validateName,
-        checkEmailUnico
-    }
+    clearUsuariosForTesting
 };

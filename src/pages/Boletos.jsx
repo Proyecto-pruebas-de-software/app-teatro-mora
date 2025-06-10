@@ -55,7 +55,7 @@ function Boletos() {
       const response = await axios.post('/api/boletos/comprar', {
         eventoId: eventoSeleccionado,
         cantidad: cantidad,
-        usuarioId: 'current-user-id', // Reemplazar con ID real del usuario cuando se implemente la autenticación
+        usuarioId: 'current-user-id', // Reemplazar con ID de usuario real cuando se implemente la autenticación
       })
       
       // Manejar compra exitosa

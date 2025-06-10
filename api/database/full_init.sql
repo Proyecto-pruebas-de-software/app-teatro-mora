@@ -86,7 +86,8 @@ CREATE TABLE mensajes_foro (
     usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
     evento_id INTEGER REFERENCES eventos(id), -- Made nullable to accommodate messages not tied to specific events
     mensaje TEXT NOT NULL,
-    creado_en TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    creado_en TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    parent_mensaje_id INTEGER REFERENCES mensajes_foro(id) ON DELETE CASCADE -- Added for threading replies
 );
 
 -- Create Message Reports table
@@ -135,49 +136,49 @@ INSERT INTO eventos (nombre, descripcion, fecha, hora, precio, aforo, vendidos, 
 (
     'Romeo y Julieta',
     'La clásica historia de amor de Shakespeare cobra vida en esta nueva producción.',
-    '2024-05-15',
+    '2025-05-15',
     '19:30:00',
     25.99,
     200,
     0,
-    'https://images.unsplash.com/photo-1598387993441-a364f854c3e1',
-    '2024-04-15 00:00:00',
+    'https://placekeanu.com/400/300',
+    '2025-04-15 00:00:00',
     (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)
 ),
 (
     'El Lago de los Cisnes',
     'El ballet clásico por excelencia interpretado por nuestra compañía de danza.',
-    '2024-06-01',
+    '2025-06-01',
     '20:00:00',
     35.99,
     300,
     0,
-    'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7',
-    '2024-05-01 00:00:00',
+    'https://placekeanu.com/400/300/grayscale',
+    '2025-05-01 00:00:00',
     (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)
 ),
 (
     'El Fantasma de la Ópera',
     'Un espectáculo musical que te dejará sin aliento.',
-    '2024-06-15',
+    '2025-06-15',
     '19:00:00',
     45.99,
     250,
     0,
-    'https://images.unsplash.com/photo-1495927007324-395367f7e38e',
-    '2024-05-15 00:00:00',
+    'https://placekeanu.com/400/300/young',
+    '2025-05-15 00:00:00',
     (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)
 ),
-('Festival de Teatro Contemporáneo', 'Un festival que reúne las mejores obras contemporáneas del momento.', '2025-06-20', '00:00:00', 0.00, 100, 0, NULL, '2025-05-20 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
-('Monólogos de Medianoche', 'Una noche de humor y reflexión con los mejores monologuistas.', '2025-08-10', '00:00:00', 0.00, 100, 0, NULL, '2025-07-10 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
-('La Casa de Bernarda Alba', 'Clásico de Federico García Lorca interpretado por un elenco local.', '2025-09-05', '00:00:00', 0.00, 100, 0, NULL, '2025-08-05 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
-('Improvisación en Escena', 'Show único donde el público decide el rumbo de la historia.', '2025-07-25', '00:00:00', 0.00, 100, 0, NULL, '2025-06-25 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
-('Danza Moderna: Evolución', 'Espectáculo de danza que explora los límites del movimiento.', '2025-08-30', '00:00:00', 0.00, 100, 0, NULL, '2025-07-30 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
-('Concierto de Música Clásica', 'La orquesta sinfónica presenta obras maestras de Mozart y Beethoven.', '2025-10-15', '00:00:00', 0.00, 100, 0, NULL, '2025-09-15 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
-('Teatro Infantil: El Bosque Mágico', 'Una aventura mágica para toda la familia.', '2025-07-01', '00:00:00', 0.00, 100, 0, NULL, '2025-06-01 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
-('Noche de Stand-Up Comedy', 'Los mejores comediantes locales en una noche de risas.', '2025-08-05', '00:00:00', 0.00, 100, 0, NULL, '2025-07-05 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
-('Obra Musical: Sueños de Broadway', 'Un recorrido por los mejores musicales de todos los tiempos.', '2025-09-20', '00:00:00', 0.00, 100, 0, NULL, '2025-08-20 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
-('Performance Art: Metamorfosis', 'Una experiencia única que combina arte visual y teatro experimental.', '2025-11-01', '00:00:00', 0.00, 100, 0, NULL, '2025-10-01 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1));
+('Festival de Teatro Contemporáneo', 'Un festival que reúne las mejores obras contemporáneas del momento.', '2026-06-20', '00:00:00', 0.00, 100, 0, 'https://placekeanu.com/400/300/baby', '2026-05-20 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
+('Monólogos de Medianoche', 'Una noche de humor y reflexión con los mejores monologuistas.', '2026-08-10', '00:00:00', 0.00, 100, 0, 'https://placekeanu.com/400/300/matrix', '2026-07-10 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
+('La Casa de Bernarda Alba', 'Clásico de Federico García Lorca interpretado por un elenco local.', '2026-09-05', '00:00:00', 0.00, 100, 0, 'https://placekeanu.com/400/300/bw', '2026-08-05 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
+('Improvisación en Escena', 'Show único donde el público decide el rumbo de la historia.', '2026-07-25', '00:00:00', 0.00, 100, 0, 'https://placekeanu.com/400/300/g', '2026-06-25 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
+('Danza Moderna: Evolución', 'Espectáculo de danza que explora los límites del movimiento.', '2026-08-30', '00:00:00', 0.00, 100, 0, 'https://placekeanu.com/400/300/old', '2026-07-30 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
+('Concierto de Música Clásica', 'La orquesta sinfónica presenta obras maestras de Mozart y Beethoven.', '2026-10-15', '00:00:00', 0.00, 100, 0, 'https://placekeanu.com/400/300/beard', '2026-09-15 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
+('Teatro Infantil: El Bosque Mágico', 'Una aventura mágica para toda la familia.', '2026-07-01', '00:00:00', 0.00, 100, 0, 'https://placekeanu.com/400/300/glasses', '2026-06-01 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
+('Noche de Stand-Up Comedy', 'Los mejores comediantes locales en una noche de risas.', '2026-08-05', '00:00:00', 0.00, 100, 0, 'https://placekeanu.com/400/300/suit', '2026-07-05 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
+('Obra Musical: Sueños de Broadway', 'Un recorrido por los mejores musicales de todos los tiempos.', '2026-09-20', '00:00:00', 0.00, 100, 0, 'https://placekeanu.com/400/300/sad', '2026-08-20 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)),
+('Performance Art: Metamorfosis', 'Una experiencia única que combina arte visual y teatro experimental.', '2026-11-01', '00:00:00', 0.00, 100, 0, 'https://placekeanu.com/400/300/happy', '2026-10-01 00:00:00', (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1));
 
 -- Insert past events (from past_events.sql, adapted for all columns)
 INSERT INTO eventos (nombre, descripcion, fecha, hora, precio, aforo, vendidos, imagen_url, venta_inicio, creada_por) VALUES
@@ -189,7 +190,7 @@ INSERT INTO eventos (nombre, descripcion, fecha, hora, precio, aforo, vendidos, 
         20.00,      -- Default precio
         150,        -- Default aforo
         150,        -- Assume all sold for past events
-        NULL,       -- Default imagen_url
+        'https://placekeanu.com/400/300/0',       -- Default imagen_url
         '2023-05-15 00:00:00', -- Default venta_inicio
         (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)
     ),
@@ -201,7 +202,7 @@ INSERT INTO eventos (nombre, descripcion, fecha, hora, precio, aforo, vendidos, 
         25.00,
         180,
         180,
-        NULL,
+        'https://placekeanu.com/400/300/1',
         '2023-07-20 00:00:00',
         (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)
     ),
@@ -213,7 +214,7 @@ INSERT INTO eventos (nombre, descripcion, fecha, hora, precio, aforo, vendidos, 
         15.00,
         100,
         100,
-        NULL,
+        'https://placekeanu.com/400/300/2',
         '2023-08-10 00:00:00',
         (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)
     ),
@@ -225,7 +226,7 @@ INSERT INTO eventos (nombre, descripcion, fecha, hora, precio, aforo, vendidos, 
         30.00,
         200,
         200,
-        NULL,
+        'https://placekeanu.com/400/300/3',
         '2023-11-20 00:00:00',
         (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)
     ),
@@ -237,7 +238,7 @@ INSERT INTO eventos (nombre, descripcion, fecha, hora, precio, aforo, vendidos, 
         22.00,
         120,
         120,
-        NULL,
+        'https://placekeanu.com/400/300/4',
         '2023-12-15 00:00:00',
         (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)
     ),
@@ -249,79 +250,120 @@ INSERT INTO eventos (nombre, descripcion, fecha, hora, precio, aforo, vendidos, 
         28.00,
         170,
         170,
-        NULL,
+        'https://placekeanu.com/400/300/5',
         '2024-01-28 00:00:00',
+        (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)
+    ),
+    (
+        'Concierto de Primavera',
+        'Un concierto que celebra la llegada de la primavera con piezas alegres y vibrantes.',
+        '2024-03-22',
+        '18:00:00',
+        30.00,
+        130,
+        130,
+        'https://placekeanu.com/400/300/6',
+        '2024-02-22 00:00:00',
         (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1)
     );
 
--- Insert test actor data
+-- Insert actor data (from test_data.sql)
 INSERT INTO actores (nombre, biografia, foto_url) VALUES
-('Actor sin datos opcionales', NULL, 'https://picsum.photos/400/500?random=60'),
-('Actor Conflictivo', 'Biografía', 'https://picsum.photos/400/500?random=61'),
-('Ricardo Montalbán', 'Actor destacado en teatro clásico y contemporáneo. Con más de 15 años de experiencia en las artes escénicas, ha protagonizado obras emblemáticas como ''El Rey Lear'' y ''La Casa de Bernarda Alba''.', 'https://picsum.photos/400/500?random=62'),
-('Elena Vega', 'Actriz versátil especializada en drama y comedia musical. Su interpretación en ''Sueño de una Noche de Verano'' le valió el reconocimiento de la crítica teatral.', 'https://picsum.photos/400/500?random=63'),
-('Gabriel Ruiz', 'Formado en la Escuela Nacional de Arte Dramático, ha participado en más de 20 producciones teatrales. Su papel más memorable fue como protagonista en ''Don Juan Tenorio''.', 'https://picsum.photos/400/500?random=64'),
-('Laura Méndez', 'Actriz con formación en teatro clásico y danza contemporánea. Ha cautivado al público con sus interpretaciones en obras como ''La Celestina'' y ''Bodas de Sangre''.', 'https://picsum.photos/400/500?random=65'),
-('Fernando Torres', 'Actor de teatro experimental con una trayectoria de 10 años en las tablas. Sus interpretaciones se caracterizan por su intensidad y profundidad dramática.', 'https://picsum.photos/400/500?random=66');
+('Ana García', 'Actriz con una década de experiencia en teatro clásico y contemporáneo. Ha recibido múltiples premios por sus interpretaciones dramáticas.', 'https://placekeanu.com/200/200'),
+('Carlos Ruiz', 'Actor versátil conocido por sus papeles en comedias musicales y obras infantiles. También es un talentoso cantante y bailarín.', 'https://placekeanu.com/200/200/grayscale'),
+('Sofía Hernández', 'Joven promesa del teatro, destacada por su intensidad en papeles trágicos. Se graduó con honores de la Real Escuela Superior de Arte Dramático.', 'https://placekeanu.com/200/200/young'),
+('David Martínez', 'Actor de carácter con una amplia trayectoria en cine y televisión, aportando una presencia imponente a cada obra teatral.', 'https://placekeanu.com/200/200/baby'),
+('Laura Pérez', 'Actriz con experiencia en teatro experimental y de improvisación. Su creatividad y espontaneidad la hacen única en el escenario.', 'https://placekeanu.com/200/200/matrix');
+
+-- Link actors to events (example from test_data.sql)
 
 -- Add some forum messages for these past events (from past_events.sql, adapted for 'mensaje' and 'creado_en')
-INSERT INTO mensajes_foro (usuario_id, evento_id, mensaje, creado_en)
+INSERT INTO mensajes_foro (usuario_id, evento_id, mensaje, creado_en, parent_mensaje_id)
 VALUES
     (
         (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1),
         (SELECT id FROM eventos WHERE nombre = 'El Lago de los Cisnes' AND fecha = '2023-06-15'),
         'La presentación fue un éxito total. ¡Gracias a todos por asistir!',
-        '2023-06-16 10:00:00'
+        '2023-06-16 10:00:00',
+        NULL
     ),
     (
         (SELECT id FROM usuarios WHERE rol = 'user' LIMIT 1),
         (SELECT id FROM eventos WHERE nombre = 'Romeo y Julieta' AND fecha = '2023-08-20'),
         'Una interpretación maravillosa de este clásico. Los actores estuvieron excepcionales.',
-        '2023-08-21 15:30:00'
+        '2023-08-21 15:30:00',
+        NULL
     ),
     (
         (SELECT id FROM usuarios WHERE rol = 'user' ORDER BY id DESC LIMIT 1),
         (SELECT id FROM eventos WHERE nombre = 'El Cascanueces' AND fecha = '2023-12-20'),
         'Mi familia y yo disfrutamos muchísimo del espectáculo navideño. ¡Esperamos que se repita el próximo año!',
-        '2023-12-21 09:15:00'
+        '2023-12-21 09:15:00',
+        NULL
     ),
     (
         (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1),
         (SELECT id FROM eventos WHERE nombre = 'Gala de Danza Moderna' AND fecha = '2024-02-28'),
         'Gracias a todos los bailarines y al público por hacer de esta gala un momento inolvidable.',
-        '2024-02-29 11:00:00'
+        '2024-02-29 11:00:00',
+        NULL
     );
 
 -- Insert test forum messages (from test_data.sql, adapted for 'mensaje' and 'creado_en', and nullable evento_id)
-INSERT INTO mensajes_foro (usuario_id, evento_id, mensaje, creado_en)
+INSERT INTO mensajes_foro (usuario_id, evento_id, mensaje, creado_en, parent_mensaje_id)
 SELECT
     u.id,
     NULL, -- No specific event for these general messages
     'Este es un mensaje de prueba del foro. ¡Bienvenidos al Teatro Mora!',
-    NOW() - INTERVAL '1 day' * FLOOR(RANDOM() * 7)
+    NOW() - INTERVAL '1 day' * FLOOR(RANDOM() * 7),
+    NULL
 FROM usuarios u
 WHERE u.rol = 'admin'
 LIMIT 1;
 
-INSERT INTO mensajes_foro (usuario_id, evento_id, mensaje, creado_en)
+INSERT INTO mensajes_foro (usuario_id, evento_id, mensaje, creado_en, parent_mensaje_id)
 SELECT
     u.id,
     NULL,
     'Me encantó la última obra que vi aquí. ¡Excelente producción!',
-    NOW() - INTERVAL '1 day' * FLOOR(RANDOM() * 7)
+    NOW() - INTERVAL '1 day' * FLOOR(RANDOM() * 7),
+    NULL
 FROM usuarios u
 WHERE u.rol = 'user'
 LIMIT 1;
 
-INSERT INTO mensajes_foro (usuario_id, evento_id, mensaje, creado_en)
+INSERT INTO mensajes_foro (usuario_id, evento_id, mensaje, creado_en, parent_mensaje_id)
 SELECT
     u.id,
     NULL,
     '¿Alguien sabe cuándo empiezan las ventas para el próximo espectáculo?',
-    NOW() - INTERVAL '1 day' * FLOOR(RANDOM() * 7)
+    NOW() - INTERVAL '1 day' * FLOOR(RANDOM() * 7),
+    NULL
 FROM usuarios u
 WHERE u.rol = 'user'
 LIMIT 1;
+
+-- Add a reply to the first message about 'El Lago de los Cisnes'
+INSERT INTO mensajes_foro (usuario_id, evento_id, mensaje, creado_en, parent_mensaje_id)
+VALUES
+    (
+        (SELECT id FROM usuarios WHERE rol = 'user' LIMIT 1),
+        (SELECT id FROM eventos WHERE nombre = 'El Lago de los Cisnes' AND fecha = '2023-06-15'),
+        '¡Totalmente de acuerdo! Fue una noche mágica. Espero ver más ballets así.',
+        '2023-06-16 11:30:00',
+        (SELECT id FROM mensajes_foro WHERE mensaje LIKE 'La presentación fue un éxito total%' LIMIT 1)
+    );
+
+-- Add a reply to the message about 'Romeo y Julieta'
+INSERT INTO mensajes_foro (usuario_id, evento_id, mensaje, creado_en, parent_mensaje_id)
+VALUES
+    (
+        (SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1),
+        (SELECT id FROM eventos WHERE nombre = 'Romeo y Julieta' AND fecha = '2023-08-20'),
+        'Nos alegra mucho que lo disfrutaran. ¡El elenco puso mucho esfuerzo en ella!',
+        '2023-08-22 09:00:00',
+        (SELECT id FROM mensajes_foro WHERE mensaje LIKE 'Una interpretación maravillosa%' LIMIT 1)
+    );
 
 -- Insert some test reports (from test_data.sql)
 INSERT INTO reportes_mensajes (mensaje_id, usuario_id, motivo, fecha)
