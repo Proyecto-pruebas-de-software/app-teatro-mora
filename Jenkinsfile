@@ -52,7 +52,7 @@ pipeline {
       steps {
         dir('frontend') {
           echo 'Ejecutando pruebas del frontend...'
-          sh 'npx vitest --run'
+          sh 'node run-tests.js'
         }
       }
     }
@@ -66,16 +66,35 @@ pipeline {
       }
     }
 
-    stage('Deploy (solo en master)') {
-      when {
-        branch 'master'
-      }
-      steps {
-        echo 'Desplegando aplicación (rama master)...'
-        sh './scripts/deploy.sh'
-      }
-    }
+    stage('Deploy') {
+  when {
+    branch 'master'
   }
+  steps {
+    echo '🚀 Iniciando despliegue en producción...'
+
+    dir('frontend') {
+      echo '📦 Construyendo frontend...'
+      sh '''
+        npm install
+        npm run build
+      '''
+      echo '✅ Frontend construido'
+    }
+
+    dir('api') {
+      echo '🔁 Reiniciando backend...'
+      sh '''
+        npm install
+        pm2 reload ecosystem.config.js || pm2 start ecosystem.config.js
+      '''
+      echo '✅ Backend reiniciado con PM2'
+    }
+
+    echo '🎉 Despliegue completo.'
+  }
+}
+
 
   post {
     success {
