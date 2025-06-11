@@ -28,33 +28,26 @@ pipeline {
     }
 
     stage('Run Backend Tests') {
-      steps {
-        dir('api') {
-          echo 'Ejecutando pruebas del backend una por una...'
-          sh '''
-            npm install --save-dev mocha chai mocha-junit-reporter
-            
-            # Limpiamos resultados anteriores
-            rm -f test-results-*.xml
-            
-            for testfile in tests/*.test.js; do
-              echo "Ejecutando $testfile..."
-              # Ejecutar test individual y generar reporte con nombre único
-              npx mocha "$testfile" --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-$(basename $testfile .js).xml --timeout 15000
-              test_exit_code=$?
-              if [ $test_exit_code -ne 0 ]; then
-                echo "Test $testfile falló con código $test_exit_code"
-              fi
-            done
-          '''
-        }
-      }
-      post {
-        always {
-          junit 'api/test-results-*.xml'
-        }
-      }
+  steps {
+    dir('api') {
+      echo 'Ejecutando pruebas del backend una por una y forzando continuar aunque fallen...'
+      sh '''
+        npm install --save-dev mocha chai mocha-junit-reporter
+        rm -f test-results-*.xml
+        for testfile in tests/*.test.js; do
+          echo "Ejecutando $testfile..."
+          npx mocha "$testfile" --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-$(basename $testfile .js).xml --timeout 15000 || true
+        done
+      '''
     }
+  }
+  post {
+    always {
+      junit 'api/test-results-*.xml'
+    }
+  }
+}
+
 
     stage('Install Frontend Dependencies') {
       steps {
