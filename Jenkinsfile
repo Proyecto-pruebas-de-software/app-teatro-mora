@@ -1,29 +1,26 @@
 pipeline {
   agent any
-
   environment {
     NODE_ENV = 'development'
   }
-
   options {
     skipStagesAfterUnstable()
   }
-
-  stage('Install Backend Dependencies') {
-  steps {
-    dir('api') {
-      echo 'Directorio actual:'
-      sh 'pwd'
-      echo 'Listado de archivos en api:'
-      sh 'ls -la'
-      echo 'Borrando node_modules y package-lock.json...'
-      sh 'rm -rf node_modules package-lock.json'
-      echo 'Ejecutando npm install...'
-      sh 'npm install'
+  stages {         // <--- aquí abres stages
+    stage('Install Backend Dependencies') {
+      steps {
+        dir('api') {
+          echo 'Directorio actual:'
+          sh 'pwd'
+          echo 'Listado de archivos en api:'
+          sh 'ls -la'
+          echo 'Borrando node_modules y package-lock.json...'
+          sh 'rm -rf node_modules package-lock.json'
+          echo 'Ejecutando npm install...'
+          sh 'npm install'
+        }
+      }
     }
-  }
-}
-
 
     stage('Run Backend Tests') {
       steps {
@@ -96,8 +93,8 @@ pipeline {
 
         echo '🎉 Despliegue completo.'
       }
-    } // <- ✅ esta llave faltaba
-  }
+    }
+  }  // <--- aquí cierras stages
 
   post {
     success {
