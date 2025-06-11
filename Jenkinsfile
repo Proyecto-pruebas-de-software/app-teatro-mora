@@ -9,18 +9,21 @@ pipeline {
     skipStagesAfterUnstable()
   }
 
-  stages {
-    stage('Install Backend Dependencies') {
-      steps {
-        dir('api') {
-          echo 'Instalando dependencias del backend...'
-          sh '''
-            rm -rf node_modules package-lock.json
-            npm install
-          '''
-        }
-      }
+  stage('Install Backend Dependencies') {
+  steps {
+    dir('api') {
+      echo 'Directorio actual:'
+      sh 'pwd'
+      echo 'Listado de archivos en api:'
+      sh 'ls -la'
+      echo 'Borrando node_modules y package-lock.json...'
+      sh 'rm -rf node_modules package-lock.json'
+      echo 'Ejecutando npm install...'
+      sh 'npm install'
     }
+  }
+}
+
 
     stage('Run Backend Tests') {
       steps {
