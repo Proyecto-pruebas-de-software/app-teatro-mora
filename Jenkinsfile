@@ -23,6 +23,8 @@ pipeline {
           sh 'rm -rf node_modules package-lock.json'
           echo 'Ejecutando npm install...'
           sh 'npm install'
+          sh 'npm install --save-dev mocha chai mocha-junit-reporter'
+
         }
       }
     }
@@ -32,7 +34,6 @@ pipeline {
     dir('api') {
       echo 'Ejecutando pruebas del backend una por una y forzando continuar aunque fallen...'
       sh '''
-        npm install --save-dev mocha chai mocha-junit-reporter
         rm -f test-results-*.xml
         for testfile in tests/*.test.js; do
           echo "Ejecutando $testfile..."
