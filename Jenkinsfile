@@ -67,34 +67,34 @@ pipeline {
     }
 
     stage('Deploy') {
-  when {
-    branch 'master'
+      when {
+        branch 'master'
+      }
+      steps {
+        echo '🚀 Iniciando despliegue en producción...'
+
+        dir('frontend') {
+          echo '📦 Construyendo frontend...'
+          sh '''
+            npm install
+            npm run build
+          '''
+          echo '✅ Frontend construido'
+        }
+
+        dir('api') {
+          echo '🔁 Reiniciando backend...'
+          sh '''
+            npm install
+            pm2 reload ecosystem.config.js || pm2 start ecosystem.config.js
+          '''
+          echo '✅ Backend reiniciado con PM2'
+        }
+
+        echo '🎉 Despliegue completo.'
+      }
+    } // <- ✅ esta llave faltaba
   }
-  steps {
-    echo '🚀 Iniciando despliegue en producción...'
-
-    dir('frontend') {
-      echo '📦 Construyendo frontend...'
-      sh '''
-        npm install
-        npm run build
-      '''
-      echo '✅ Frontend construido'
-    }
-
-    dir('api') {
-      echo '🔁 Reiniciando backend...'
-      sh '''
-        npm install
-        pm2 reload ecosystem.config.js || pm2 start ecosystem.config.js
-      '''
-      echo '✅ Backend reiniciado con PM2'
-    }
-
-    echo '🎉 Despliegue completo.'
-  }
-}
-
 
   post {
     success {
