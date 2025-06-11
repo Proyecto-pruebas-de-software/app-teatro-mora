@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useContext } from 'react'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import {
   AppBar,
@@ -17,9 +17,8 @@ import {
 } from '@mui/material'
 import MenuIcon from '@mui/icons-material/Menu'
 import TheaterComedyIcon from '@mui/icons-material/TheaterComedy'
-import { useAuth } from '../context/AuthContext'
+import { AuthContext } from '../context/AuthContext'
 
-// Define navigation items based on auth status
 const getPages = (isAuthenticated, isAdmin) => {
   const publicPages = [
     { name: 'Eventos', path: '/eventos' },
@@ -33,26 +32,18 @@ const getPages = (isAuthenticated, isAdmin) => {
     { name: 'Foro', path: '/foro' },
   ]
 
-  if (isAdmin) {
-    return [
-      ...authenticatedPages,
-      // Any additional admin-specific pages would go here, but Foro is now for all authenticated
-    ];
-  }
-  if (isAuthenticated) return authenticatedPages
-  return publicPages
+  return isAuthenticated ? authenticatedPages : publicPages
 }
 
 function Navbar() {
   const [anchorElNav, setAnchorElNav] = useState(null)
   const [anchorElUser, setAnchorElUser] = useState(null)
-  const { user, logout, isAdmin, isAuthenticated } = useAuth()
+  const { user = {}, logout, isAdmin = false, isAuthenticated = false } = useContext(AuthContext) || {}
   const navigate = useNavigate()
 
-  console.log('Auth State:', { user, isAdmin, isAuthenticated })
-
   const pages = getPages(isAuthenticated, isAdmin)
-  console.log('Navigation Pages:', pages)
+  const userName = user?.nombre || ''
+  const userInitial = userName.charAt(0).toUpperCase()
 
   const handleOpenNavMenu = (event) => {
     setAnchorElNav(event.currentTarget)
@@ -71,9 +62,13 @@ function Navbar() {
   }
 
   const handleLogout = async () => {
-    await logout()
-    handleCloseUserMenu()
-    navigate('/iniciar-sesion')
+    try {
+      await logout?.()
+      handleCloseUserMenu()
+      navigate('/iniciar-sesion')
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
   }
 
   return (
@@ -190,7 +185,7 @@ function Navbar() {
                     color: 'inherit',
                   }}
                 >
-                  {user.nombre}
+                  {userName}
                   {isAdmin && (
                     <Typography
                       component="span"
@@ -214,8 +209,8 @@ function Navbar() {
                       variant="dot"
                       invisible={!isAdmin}
                     >
-                      <Avatar alt={user.nombre}>
-                        {user.nombre?.charAt(0).toUpperCase()}
+                      <Avatar alt={userName}>
+                        {userInitial}
                       </Avatar>
                     </Badge>
                   </IconButton>
@@ -238,7 +233,7 @@ function Navbar() {
                 >
                   <MenuItem disabled>
                     <Typography textAlign="center">
-                      {user.nombre}
+                      {userName}
                       {isAdmin && " (Admin)"}
                     </Typography>
                   </MenuItem>
@@ -264,4 +259,4 @@ function Navbar() {
   )
 }
 
-export default Navbar 
+export default Navbar
