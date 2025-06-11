@@ -62,23 +62,25 @@ describe('Actores Component', () => {
   })
 
   test('renders actores when data is loaded successfully', async () => {
-    axios.get.mockResolvedValue({ data: { data: mockActores } })
-    
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Actores />
-      </QueryClientProvider>
-    )
+  axios.get.mockResolvedValue({ data: { data: mockActores } });
+  
+  render(
+    <QueryClientProvider client={queryClient}>
+      <Actores />
+    </QueryClientProvider>
+  );
 
-    // Aumentar timeout y buscar primero el contenedor de actores
-    await waitFor(() => {
-      expect(screen.getByTestId('actores-list')).toBeInTheDocument()
-    }, { timeout: 3000 })
-    
-    expect(screen.getByText(/Keanu Reeves/i)).toBeInTheDocument()
-    expect(screen.getByText(/Carrie-Anne Moss/i)).toBeInTheDocument()
-    expect(screen.getByText(/Laurence Fishburne/i)).toBeInTheDocument()
-  })
+  // En lugar de buscar por test-id, buscamos directamente los actores
+  await waitFor(() => {
+    // Verificamos que los 3 actores están presentes
+    expect(screen.getAllByRole('heading', { level: 2 }).length).toBe(3);
+  }, { timeout: 3000 });
+  
+  // Verificamos los nombres específicos
+  expect(screen.getByText(/Keanu Reeves/i)).toBeInTheDocument();
+  expect(screen.getByText(/Carrie-Anne Moss/i)).toBeInTheDocument();
+  expect(screen.getByText(/Laurence Fishburne/i)).toBeInTheDocument();
+});
 
   test('filters actores by search term', async () => {
     axios.get.mockResolvedValue({ data: { data: mockActores } })
