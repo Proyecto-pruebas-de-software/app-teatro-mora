@@ -6,6 +6,11 @@ pipeline {
   options {
     skipStagesAfterUnstable()
   }
+  
+  tools {
+    nodejs 'node24' 
+  }
+  
   stages {         // <--- aquí abres stages
     stage('Install Backend Dependencies') {
       steps {
