@@ -11,7 +11,7 @@ pipeline {
     nodejs 'node24' 
   }
   
-  stages {         // <--- aquí abres stages
+  stages {
     stage('Install Backend Dependencies') {
       steps {
         dir('api') {
@@ -30,16 +30,28 @@ pipeline {
     stage('Run Backend Tests') {
       steps {
         dir('api') {
-          echo 'Ejecutando pruebas del backend...'
+          echo 'Ejecutando pruebas del backend una por una...'
           sh '''
             npm install --save-dev mocha chai mocha-junit-reporter
-            npx mocha tests --reporter mocha-junit-reporter --timeout 15000
+            
+            # Limpiamos resultados anteriores
+            rm -f test-results-*.xml
+            
+            for testfile in tests/*.test.js; do
+              echo "Ejecutando $testfile..."
+              # Ejecutar test individual y generar reporte con nombre único
+              npx mocha "$testfile" --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-$(basename $testfile .js).xml --timeout 15000
+              test_exit_code=$?
+              if [ $test_exit_code -ne 0 ]; then
+                echo "Test $testfile falló con código $test_exit_code"
+              fi
+            done
           '''
         }
       }
       post {
         always {
-          junit 'api/test-results.xml'
+          junit 'api/test-results-*.xml'
         }
       }
     }
@@ -99,7 +111,7 @@ pipeline {
         echo '🎉 Despliegue completo.'
       }
     }
-  }  // <--- aquí cierras stages
+  }  // fin stages
 
   post {
     success {
