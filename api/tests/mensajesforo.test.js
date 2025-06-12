@@ -47,6 +47,10 @@ describe('API CRUD de Mensajes del Foro', function() {
         await pool.query("DELETE FROM mensajes_foro WHERE mensaje LIKE '%prueba%'");
         await pool.query("DELETE FROM usuarios WHERE email = 'mensaje_test@example.com'");
         await pool.query("DELETE FROM eventos WHERE nombre = 'Evento Mensaje Test'");
+
+        if (app.close) {
+        await app.close();
+    }
     });
 
     // Test POST /mensajes
