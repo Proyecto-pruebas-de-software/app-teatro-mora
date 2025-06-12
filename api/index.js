@@ -9,6 +9,7 @@ const port = process.env.PORT || 3000;
 // Configuración básica para testing
 const isTestEnvironment = process.env.NODE_ENV === 'test';
 
+
 // Configuración de rate limiting (deshabilitado para testing)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -113,12 +114,26 @@ if (!isTestEnvironment) {
 // Para testing, agregamos un método para cerrar conexiones
 if (isTestEnvironment) {
   app.close = async () => {
-    // Cierra conexiones a la base de datos si es necesario
-    if (routes.actores && routes.actores.pool) {
-      await routes.actores.pool.end();
-    }
-    // Agrega cierre para otros pools si existen
+    const closePool = async (mod) => {
+      if (mod && mod.pool && typeof mod.pool.end === 'function') {
+        try {
+          await mod.pool.end();
+        } catch (e) {
+          console.error(`Error cerrando pool de ${mod}:`, e);
+        }
+      }
+    };
+
+    await Promise.all([
+      closePool(routes.actores),
+      closePool(routes.boletos),
+      closePool(routes.usuarios),
+      closePool(routes.eventos),
+      closePool(routes.mensajes),
+      closePool(routes.cola)
+    ]);
   };
 }
+
 
 module.exports = app;
