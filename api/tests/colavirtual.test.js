@@ -48,6 +48,10 @@ describe('API CRUD de Cola Virtual', function() {
         await pool.query("DELETE FROM cola_virtual WHERE turno_numero BETWEEN 1 AND 1000");
         await pool.query("DELETE FROM usuarios WHERE email = 'cola_test@example.com'");
         await pool.query("DELETE FROM eventos WHERE nombre = 'Evento Cola Test'");
+
+        if (app.close) {
+        await app.close();
+    }
     });
 
     // Test POST /cola
