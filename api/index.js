@@ -87,10 +87,12 @@ app.use((req, res) => {
   });
 });
 
-// Servidor y manejo de cierre
+// === 👇 Aquí empieza lo importante ===
+
 let server = null;
 
-if (!isTestEnvironment) {
+// Solo levanta el server si se ejecuta directamente (no durante testing)
+if (require.main === module) {
   server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -103,7 +105,7 @@ if (!isTestEnvironment) {
   });
 }
 
-// Método de cierre también en testing
+// Para cerrar en test
 app.close = async () => {
   const closePool = async (mod) => {
     if (mod?.pool?.end) {
@@ -130,4 +132,5 @@ app.close = async () => {
   }
 };
 
-module.exports = { app, server };
+// ✅ Lo que necesitas exportar para los tests
+module.exports = app;
