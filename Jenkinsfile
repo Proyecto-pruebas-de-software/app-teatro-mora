@@ -52,7 +52,7 @@ pipeline {
 
     stage('Install Frontend Dependencies') {
       steps {
-        dir('frontend') {
+        dir('src') {
           echo 'Instalando dependencias del frontend...'
           sh 'npm install'
         }
@@ -61,7 +61,7 @@ pipeline {
 
     stage('Run Frontend Tests') {
       steps {
-        dir('frontend') {
+        dir('src') {
           echo 'Ejecutando pruebas del frontend...'
           sh 'node run-tests.js'
         }
@@ -70,7 +70,7 @@ pipeline {
 
     stage('Build Frontend') {
       steps {
-        dir('frontend') {
+        dir('src') {
           echo 'Construyendo el frontend...'
           sh 'npm run build'
         }
