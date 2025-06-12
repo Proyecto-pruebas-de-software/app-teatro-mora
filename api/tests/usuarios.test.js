@@ -30,6 +30,10 @@ before(async () => {
 after(async () => {
     // Limpieza final (el CASCADE se encargará de las relaciones)
     await pool.query("DELETE FROM usuarios WHERE email LIKE '%@example.com'");
+
+if (app.close) {
+        await app.close();
+    }
 });
 
 
