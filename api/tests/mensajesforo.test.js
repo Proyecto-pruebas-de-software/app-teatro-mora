@@ -51,8 +51,9 @@ describe('API CRUD de Mensajes del Foro', function() {
         await pool.query("DELETE FROM eventos WHERE nombre = 'Evento Mensaje Test'");
 
         if (app.close) {
-        await app.close();
-    }
+    await app.close();
+  }
+  process.exit();
     });
 
     // Test POST /mensajes
