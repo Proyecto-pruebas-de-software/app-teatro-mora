@@ -51,8 +51,9 @@ describe('API CRUD de Cola Virtual', function() {
         await pool.query("DELETE FROM eventos WHERE nombre = 'Evento Cola Test'");
 
         if (app.close) {
-        await app.close();
-    }
+    await app.close();
+  }
+  process.exit();
     });
 
     // Test POST /cola
