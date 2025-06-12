@@ -1,6 +1,8 @@
+process.env.NODE_ENV = 'test';
+
 const chai = require('chai');
 const chaiHttp = require('chai-http');
-const app = require('../app');
+const app = require('../index');
 const expect = chai.expect;
 const pool = require('../queries/queries_boletos').pool;
 
