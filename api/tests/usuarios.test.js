@@ -34,8 +34,9 @@ after(async () => {
     await pool.query("DELETE FROM usuarios WHERE email LIKE '%@example.com'");
 
 if (app.close) {
-        await app.close();
-    }
+    await app.close();
+  }
+  process.exit();
 });
 
 
