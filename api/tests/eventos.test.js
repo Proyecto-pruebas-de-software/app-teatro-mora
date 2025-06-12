@@ -40,8 +40,9 @@ describe('API CRUD de Eventos', function() {
         await pool.query("DELETE FROM usuarios WHERE email = 'evento_test@example.com'");
 
         if (app.close) {
-        await app.close();
-    }
+    await app.close();
+  }
+  process.exit();
     });
 
     // Test POST /eventos
