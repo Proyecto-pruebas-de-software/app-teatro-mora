@@ -54,7 +54,7 @@ pipeline {
       steps {
         dir('.') {
           echo 'Instalando dependencias del frontend...'
-          sh 'npm install'
+          sh 'npm install --legacy-peer-deps'
         }
       }
     }
