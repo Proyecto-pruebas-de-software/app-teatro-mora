@@ -29,6 +29,7 @@ Hecho por:
     - [Autenticación](#autenticación)
   - [Testing](#testing)
   - [Despliegue (Futuro)](#despliegue-futuro)
+  - [Despliegue e Integración Continua con Jenkins](#despliegue-e-integracion-continua-con-jenkins)
   - [Contribución](#contribución)
   - [📄 Licencia](#-licencia)
 
@@ -271,6 +272,42 @@ para cada modulo CRUD.
 ## Despliegue (Futuro)
 Planeado para AWS EC2 + RDS. Consultar con el equipo.
 
+## Despliegue e Integración Continua con Jenkins
+
+Este proyecto utiliza **Jenkins** para automatizar la integración y despliegue continuo. Jenkins se encuentra instalado en el mismo servidor de producción y ejecuta automáticamente los siguientes pasos al detectar cambios en la rama `master` de GitHub:
+
+1. Clona la última versión del repositorio.
+2. Instala dependencias para backend (`api/`) y frontend (`src/`).
+3. Ejecuta pruebas automatizadas:
+   - Backend: Mocha + Chai
+   - Frontend: scripts definidos en `package.json`
+4. Si las pruebas son exitosas:
+   - Compila el frontend con `npm run build`
+   - Reinicia el backend con `pm2`
+   - Despliega automáticamente en producción
+
+### Validaciones y mejoras del pipeline
+
+- El pipeline detiene el despliegue si fallan las pruebas.
+- Se corrigió un error donde los tests del frontend no detenían el pipeline.
+- Se mejoraron logs de compilación (`vite.config.js`) y manejo de errores.
+
+### Dependencias involucradas
+
+Jenkins interactúa con:
+
+- **GitHub:** repositorio del código
+- **Node.js / npm:** gestión de dependencias y scripts
+- **PostgreSQL:** base de datos (si se restauran datos)
+- **PM2:** control de procesos del backend
+- **Sistema de archivos:** compilación e instalación del frontend
+
+### Problemas comunes y soluciones
+
+- **Conflictos en React:** resueltos con `npm install --legacy-peer-deps`
+- **Permisos de Jenkins:** se ajustaron para acceso a carpetas necesarias
+- **Tests de frontend falsos positivos:** se forzó la propagación de errores
+- **Compilación sin logs útiles:** se mejoró el log y el manejo de errores
 
 ##  Contribución
 
