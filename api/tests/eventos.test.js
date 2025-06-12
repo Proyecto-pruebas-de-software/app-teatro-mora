@@ -36,6 +36,10 @@ describe('API CRUD de Eventos', function() {
     after(async () => {
         await pool.query("DELETE FROM eventos WHERE nombre LIKE 'Evento%'");
         await pool.query("DELETE FROM usuarios WHERE email = 'evento_test@example.com'");
+
+        if (app.close) {
+        await app.close();
+    }
     });
 
     // Test POST /eventos
