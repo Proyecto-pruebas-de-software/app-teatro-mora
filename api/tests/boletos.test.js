@@ -53,11 +53,10 @@ describe('API CRUD de Boletos', function() {
         await pool.query("DELETE FROM usuarios WHERE email = 'boleto_test@example.com'");
         await pool.query("DELETE FROM eventos WHERE nombre = 'Evento Boleto Test'");
 
-        // Cerrar app y conexiones si existe el método
-        await pool.end();
-        if (server && server.close) {
-            await new Promise((resolve) => server.close(resolve));
-        }
+        if (app.close) {
+    await app.close();
+  }
+  process.exit();
     });
 
     // POST tests
