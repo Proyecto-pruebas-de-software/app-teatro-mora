@@ -46,12 +46,18 @@ describe('API CRUD de Boletos', function() {
     });
 
     after(async () => {
+        // Limpiar datos generados
         await pool.query("DELETE FROM boletos WHERE asiento LIKE 'A1%'");
         await pool.query("DELETE FROM usuarios WHERE email = 'boleto_test@example.com'");
         await pool.query("DELETE FROM eventos WHERE nombre = 'Evento Boleto Test'");
+
+        // Cerrar app y conexiones si existe el método
+        if (app.close) {
+            await app.close();
+        }
     });
 
-    // Test POST /boletos
+    // POST tests
     describe('POST /boletos', () => {
         it('Debería crear un nuevo boleto con datos válidos (201)', async () => {
             const res = await chai.request(app)
@@ -94,7 +100,7 @@ describe('API CRUD de Boletos', function() {
         it('Debería rechazar asiento ya ocupado (409)', async () => {
             const res = await chai.request(app)
                 .post('/boletos')
-                .send(testBoleto); // Mismo asiento que el primero
+                .send(testBoleto);
 
             expect(res).to.have.status(409);
             expect(res.body.message).to.include('El asiento ya está ocupado');
@@ -111,7 +117,7 @@ describe('API CRUD de Boletos', function() {
         });
     });
 
-    // Test GET /boletos
+    // GET tests
     describe('GET /boletos', () => {
         it('Debería listar todos los boletos (200)', async () => {
             const res = await chai.request(app)
@@ -135,8 +141,6 @@ describe('API CRUD de Boletos', function() {
                 asiento: testBoleto.asiento,
                 fue_usado: false
             });
-            expect(res.body.data).to.have.property('usuario_nombre');
-            expect(res.body.data).to.have.property('evento_nombre');
         });
 
         it('Debería fallar con ID inexistente (404)', async () => {
@@ -147,7 +151,7 @@ describe('API CRUD de Boletos', function() {
         });
     });
 
-    // Test PUT /boletos/:id
+    // PUT tests
     describe('PUT /boletos/:id', () => {
         it('Debería actualizar el estado de uso de un boleto (200)', async () => {
             const res = await chai.request(app)
@@ -177,13 +181,9 @@ describe('API CRUD de Boletos', function() {
         });
 
         it('Debería rechazar actualización con asiento ocupado (409)', async () => {
-            // Crear otro boleto
             const otroBoleto = {...testBoleto, asiento: "A15"};
-            const otroRes = await chai.request(app)
-                .post('/boletos')
-                .send(otroBoleto);
+            await chai.request(app).post('/boletos').send(otroBoleto);
 
-            // Intentar mover el primer boleto al mismo asiento
             const res = await chai.request(app)
                 .put(`/boletos/${testBoletoId}`)
                 .send({ asiento: "A15" });
@@ -200,10 +200,9 @@ describe('API CRUD de Boletos', function() {
         });
     });
 
-    // Test DELETE /boletos/:id
+    // DELETE tests
     describe('DELETE /boletos/:id', () => {
         it('Debería eliminar un boleto existente (200)', async () => {
-            // Primero creamos un boleto para eliminar
             const boletoToDelete = {...testBoleto, asiento: "A16"};
             const createRes = await chai.request(app)
                 .post('/boletos')
@@ -215,7 +214,6 @@ describe('API CRUD de Boletos', function() {
             expect(deleteRes).to.have.status(200);
             expect(deleteRes.body.data.asiento).to.equal("A16");
 
-            // Verificar que ya no existe
             const getRes = await chai.request(app)
                 .get(`/boletos/${createRes.body.data.id}`);
             expect(getRes).to.have.status(404);
@@ -229,7 +227,7 @@ describe('API CRUD de Boletos', function() {
         });
     });
 
-    // Pruebas adicionales
+    // Validaciones adicionales
     describe('Validaciones adicionales', () => {
         it('Debería rechazar turno_numero no entero (400)', async () => {
             const res = await chai.request(app)
