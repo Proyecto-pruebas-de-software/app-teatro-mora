@@ -11,7 +11,7 @@ API para la gestión de eventos, actores, usuarios y boletos del Teatro Mora Vir
 - **Despliegue**: AWS (EC2/RDS)
 - **Frontend**: React (próximamente)
 
-## Estructura del Proyecto
+## Estructura del Proyecto.
 
 ```
 .
