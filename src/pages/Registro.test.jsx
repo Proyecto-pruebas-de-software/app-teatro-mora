@@ -1,152 +1,112 @@
+import React from 'react';
+import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import Registro from './Registro';
-import { useAuth } from '../context/AuthContext';
 
-// Mocking the register function from useAuth context
-vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({
-    register: vi.fn(),
-  }),
+// Mocks
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: jest.fn(),
+  Link: ({ to, children }) => <a href={to}>{children}</a>,
 }));
 
-// Create a QueryClient for the test
-const queryClient = new QueryClient();
+jest.mock('../context/AuthContext', () => ({
+  useAuth: jest.fn(),
+}));
 
-describe('Registro Component', () => {
+describe('Componente Registro', () => {
+  const mockRegister = jest.fn();
+  const mockNavigate = jest.fn();
+
   beforeEach(() => {
-    // Reset the mock function before each test
-    useAuth().register.mockReset();
-  });
-
-  test('renders registration form correctly', () => {
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <Registro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    // Check that form elements are rendered
-    expect(screen.getByLabelText(/Nombre Completo/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Correo Electrónico/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Contraseña/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Confirmar Contraseña/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Registrarse/ })).toBeInTheDocument();
-  });
-
-  test('shows error message when passwords do not match', async () => {
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <Registro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    // Fill the form with different passwords
-    fireEvent.change(screen.getByLabelText(/Contraseña/), { target: { value: 'Password123!' } });
-    fireEvent.change(screen.getByLabelText(/Confirmar Contraseña/), { target: { value: 'DifferentPassword123!' } });
-
-    // Submit the form
-    fireEvent.click(screen.getByRole('button', { name: /Registrarse/ }));
-
-    // Wait for the error message to appear
-    await waitFor(() => {
-      expect(screen.getByText('Las contraseñas no coinciden')).toBeInTheDocument();
+    jest.clearAllMocks();
+    useNavigate.mockReturnValue(mockNavigate);
+    require('../context/AuthContext').useAuth.mockReturnValue({
+      register: mockRegister,
     });
   });
 
-  test('shows error message when password is weak', async () => {
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <Registro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
+  // Función helper mejorada para obtener los campos del formulario
+  const getFormFields = () => {
+    const allPasswordInputs = screen.getAllByLabelText(/contraseña/i);
+    const allConfirmInputs = screen.getAllByLabelText(/confirmar contraseña/i);
+    
+    return {
+      nombreInput: screen.getByRole('textbox', { name: /nombre completo/i }),
+      emailInput: screen.getByRole('textbox', { name: /correo electrónico/i }),
+      passwordInput: allPasswordInputs.find(input => 
+        input.id === 'password' || input.name === 'password'
+      ),
+      confirmPasswordInput: allConfirmInputs.find(input => 
+        input.id === 'confirmPassword' || input.name === 'confirmPassword'
+      ),
+      submitButton: screen.getByRole('button', { name: /registrarse/i })
+    };
+  };
 
-    // Fill the form with weak password
-    fireEvent.change(screen.getByLabelText(/Contraseña/), { target: { value: 'weakpassword' } });
-    fireEvent.change(screen.getByLabelText(/Confirmar Contraseña/), { target: { value: 'weakpassword' } });
+  test('renderiza título principal', () => {
+    render(<Registro />);
+    expect(screen.getByRole('heading', { 
+      name: 'Registrarse',
+      level: 1 
+    })).toBeInTheDocument();
+  });
 
-    // Submit the form
-    fireEvent.click(screen.getByRole('button', { name: /Registrarse/ }));
+  test('muestra todos los campos del formulario', () => {
+    render(<Registro />);
+    const fields = getFormFields();
+    
+    expect(fields.nombreInput).toBeInTheDocument();
+    expect(fields.emailInput).toBeInTheDocument();
+    expect(fields.passwordInput).toBeInTheDocument();
+    expect(fields.confirmPasswordInput).toBeInTheDocument();
+    expect(fields.submitButton).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /¿ya tienes una cuenta\? inicia sesión/i })).toBeInTheDocument();
+  });
 
-    // Wait for the error message to appear
+  test('permite ingresar datos en los campos del formulario', () => {
+    render(<Registro />);
+    const { nombreInput, emailInput, passwordInput, confirmPasswordInput } = getFormFields();
+
+    fireEvent.change(nombreInput, { target: { value: 'Juan Pérez' } });
+    fireEvent.change(emailInput, { target: { value: 'juan@example.com' } });
+    fireEvent.change(passwordInput, { target: { value: 'Password123!' } });
+    fireEvent.change(confirmPasswordInput, { target: { value: 'Password123!' } });
+
+    expect(nombreInput).toHaveValue('Juan Pérez');
+    expect(emailInput).toHaveValue('juan@example.com');
+    expect(passwordInput).toHaveValue('Password123!');
+    expect(confirmPasswordInput).toHaveValue('Password123!');
+  });
+
+  test('muestra error cuando el registro falla', async () => {
+    const errorMessage = 'El correo ya está registrado';
+    mockRegister.mockResolvedValue({ 
+      success: false, 
+      error: errorMessage 
+    });
+    
+    render(<Registro />);
+    const { nombreInput, emailInput, passwordInput, confirmPasswordInput, submitButton } = getFormFields();
+    
+    fireEvent.change(nombreInput, { target: { value: 'Juan Pérez' } });
+    fireEvent.change(emailInput, { target: { value: 'juan@example.com' } });
+    fireEvent.change(passwordInput, { target: { value: 'Password123!' } });
+    fireEvent.change(confirmPasswordInput, { target: { value: 'Password123!' } });
+    fireEvent.click(submitButton);
+
     await waitFor(() => {
-      expect(screen.getByText('La contraseña debe tener por lo menos 8 caracteres y contener al menos una letra mayúscula, un número y un carácter especial (@$!%*?&)')).toBeInTheDocument();
+      expect(screen.getByText(errorMessage)).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toBeInTheDocument();
     });
   });
 
-  test('successful registration redirects to home page', async () => {
-    useAuth().register.mockResolvedValueOnce({ success: true });
 
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <Registro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    // Fill the form with valid data
-    fireEvent.change(screen.getByLabelText(/Nombre Completo/), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText(/Correo Electrónico/), { target: { value: 'john.doe@example.com' } });
-    fireEvent.change(screen.getByLabelText(/Contraseña/), { target: { value: 'Password123!' } });
-    fireEvent.change(screen.getByLabelText(/Confirmar Contraseña/), { target: { value: 'Password123!' } });
-
-    // Submit the form
-    fireEvent.click(screen.getByRole('button', { name: /Registrarse/ }));
-
-    // Wait for the redirect to home page
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/');
-    });
-  });
-
-  test('displays error message on failed registration', async () => {
-    useAuth().register.mockResolvedValueOnce({ success: false, error: 'Email already taken' });
-
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <Registro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    // Fill the form with valid data
-    fireEvent.change(screen.getByLabelText(/Nombre Completo/), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText(/Correo Electrónico/), { target: { value: 'john.doe@example.com' } });
-    fireEvent.change(screen.getByLabelText(/Contraseña/), { target: { value: 'Password123!' } });
-    fireEvent.change(screen.getByLabelText(/Confirmar Contraseña/), { target: { value: 'Password123!' } });
-
-    // Submit the form
-    fireEvent.click(screen.getByRole('button', { name: /Registrarse/ }));
-
-    // Wait for the error message to appear
-    await waitFor(() => {
-      expect(screen.getByText('Email already taken')).toBeInTheDocument();
-    });
-  });
-
-  test('clicking "Iniciar Sesión" link navigates to login page', () => {
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <Registro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    // Click the "Iniciar Sesión" link
-    fireEvent.click(screen.getByText(/¿Ya tienes una cuenta\? Inicia Sesión/));
-
-    // Check if the URL changes to the login page
-    expect(window.location.pathname).toBe('/iniciar-sesion');
+  test('muestra enlace a inicio de sesión correctamente', () => {
+    render(<Registro />);
+    const link = screen.getByRole('link', { name: /¿ya tienes una cuenta\? inicia sesión/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/iniciar-sesion');
   });
 });

@@ -1,102 +1,107 @@
+import React from 'react';
+import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import InicioSesion from './InicioSesion';
-import { useAuth } from '../context/AuthContext';
 
-// Mocking the login function from useAuth context
-vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({
-    login: vi.fn(),
-  }),
+// Mocks
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: jest.fn(),
+  Link: ({ to, children }) => <a href={to}>{children}</a>,
 }));
 
-// Create a QueryClient for the test
-const queryClient = new QueryClient();
+jest.mock('../context/AuthContext', () => ({
+  useAuth: jest.fn(),
+}));
 
-describe('InicioSesion Component', () => {
+describe('Componente InicioSesion', () => {
+  const mockLogin = jest.fn();
+  const mockNavigate = jest.fn();
+
   beforeEach(() => {
-    // Reset the mock function before each test
-    useAuth().login.mockReset();
-  });
-
-  test('renders login form correctly', () => {
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <InicioSesion />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    // Check that form elements are rendered
-    expect(screen.getByLabelText(/Correo Electrónico/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Contraseña/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Iniciar Sesión/ })).toBeInTheDocument();
-  });
-
-  test('shows error message when login fails', async () => {
-    useAuth().login.mockResolvedValueOnce({ success: false, error: 'Invalid credentials' });
-
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <InicioSesion />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    // Fill the form with email and password
-    fireEvent.change(screen.getByLabelText(/Correo Electrónico/), { target: { value: 'test@example.com' } });
-    fireEvent.change(screen.getByLabelText(/Contraseña/), { target: { value: 'wrongpassword' } });
-
-    // Submit the form
-    fireEvent.click(screen.getByRole('button', { name: /Iniciar Sesión/ }));
-
-    // Wait for error message to appear
-    await waitFor(() => {
-      expect(screen.getByText('Invalid credentials')).toBeInTheDocument();
+    jest.clearAllMocks();
+    useNavigate.mockReturnValue(mockNavigate);
+    require('../context/AuthContext').useAuth.mockReturnValue({
+      login: mockLogin,
     });
   });
 
-  test('redirects to home page on successful login', async () => {
-    useAuth().login.mockResolvedValueOnce({ success: true });
+  test('renderiza título principal', () => {
+    render(<InicioSesion />);
+    // Buscamos específicamente el título h1
+    expect(screen.getByRole('heading', { 
+      name: 'Iniciar Sesión',
+      level: 1 
+    })).toBeInTheDocument();
+  });
 
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <InicioSesion />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
+  test('muestra campos de formulario', () => {
+    render(<InicioSesion />);
+    expect(screen.getByRole('textbox', { name: /correo electrónico/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/contraseña/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /iniciar sesión/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /¿no tienes una cuenta\? regístrate/i })).toBeInTheDocument();
+  });
 
-    // Fill the form with valid email and password
-    fireEvent.change(screen.getByLabelText(/Correo Electrónico/), { target: { value: 'test@example.com' } });
-    fireEvent.change(screen.getByLabelText(/Contraseña/), { target: { value: 'correctpassword' } });
+  test('permite ingresar email y contraseña', () => {
+    render(<InicioSesion />);
+    const emailInput = screen.getByRole('textbox', { name: /correo electrónico/i });
+    const passwordInput = screen.getByLabelText(/contraseña/i);
 
-    // Submit the form
-    fireEvent.click(screen.getByRole('button', { name: /Iniciar Sesión/ }));
+    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+    fireEvent.change(passwordInput, { target: { value: 'password123' } });
 
-    // Wait for the home navigation after login
+    expect(emailInput).toHaveValue('test@example.com');
+    expect(passwordInput).toHaveValue('password123');
+  });
+
+  test('maneja el envío del formulario con éxito', async () => {
+    mockLogin.mockResolvedValue({ success: true });
+    render(<InicioSesion />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: /correo electrónico/i }), { 
+      target: { value: 'test@example.com' } 
+    });
+    fireEvent.change(screen.getByLabelText(/contraseña/i), { 
+      target: { value: 'password123' } 
+    });
+    fireEvent.click(screen.getByRole('button', { name: /iniciar sesión/i }));
+
     await waitFor(() => {
-      expect(window.location.pathname).toBe('/');
+      expect(mockLogin).toHaveBeenCalledWith('test@example.com', 'password123');
+      expect(mockNavigate).toHaveBeenCalledWith('/');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
   });
 
-  test('clicking "Regístrate" link navigates to registration page', () => {
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <InicioSesion />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
+  test('muestra error cuando el login falla', async () => {
+    const errorMessage = 'Credenciales inválidas';
+    mockLogin.mockResolvedValue({ 
+      success: false, 
+      error: errorMessage 
+    });
+    
+    render(<InicioSesion />);
 
-    // Click the "Regístrate" link
-    fireEvent.click(screen.getByText(/¿No tienes una cuenta\? Regístrate/));
+    fireEvent.change(screen.getByRole('textbox', { name: /correo electrónico/i }), { 
+      target: { value: 'test@example.com' } 
+    });
+    fireEvent.change(screen.getByLabelText(/contraseña/i), { 
+      target: { value: 'wrongpassword' } 
+    });
+    fireEvent.click(screen.getByRole('button', { name: /iniciar sesión/i }));
 
-    // Check if the URL changes to the registration page
-    expect(window.location.pathname).toBe('/registro');
+    await waitFor(() => {
+      expect(screen.getByText(errorMessage)).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+  });
+
+  test('muestra enlace a registro correctamente', () => {
+    render(<InicioSesion />);
+    const link = screen.getByRole('link', { name: /¿no tienes una cuenta\? regístrate/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/registro');
   });
 });

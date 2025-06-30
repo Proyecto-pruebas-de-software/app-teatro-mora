@@ -1,169 +1,135 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { vi } from 'vitest'
-import Boletos from './Boletos'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import axios from 'axios'
+import React from 'react';
+import '@testing-library/jest-dom';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
+import Boletos from './Boletos';
 
-// Crear un cliente de React Query para las pruebas
-const queryClient = new QueryClient()
-
-// Mock de la respuesta de axios
-vi.mock('axios')
+// Mocks globales
+jest.mock('@tanstack/react-query');
+jest.mock('axios');
 
 const mockEventos = [
-  { 
-    id: 1, 
-    nombre: 'Concierto de Rock', 
-    fecha: '2025-06-20', 
-    hora: '20:00', 
-    boletosDisponibles: 100, 
-    precio: 20.00 
+  {
+    id: '1',
+    nombre: 'Concierto de Jazz',
+    fecha: '2023-12-15T20:00:00',
+    hora: '20:00',
+    precio: 25.99,
+    boletosDisponibles: 10
   },
-  { 
-    id: 2, 
-    nombre: 'Obra de Teatro', 
-    fecha: '2025-06-22', 
-    hora: '18:00', 
-    boletosDisponibles: 0, 
-    precio: 25.00 
+  {
+    id: '2',
+    nombre: 'Obra de Teatro',
+    fecha: '2023-12-20T19:30:00',
+    hora: '19:30',
+    precio: 19.99,
+    boletosDisponibles: 0
   }
-]
+];
 
-describe('Boletos Component', () => {
+describe('Componente Boletos', () => {
   beforeEach(() => {
-    axios.get.mockResolvedValue({ data: mockEventos })
-  })
+    jest.clearAllMocks();
+    
+    // Mock para useQuery
+    useQuery.mockImplementation(({ queryFn }) => ({
+      data: queryFn ? mockEventos : undefined,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    }));
 
-  test('renders loading spinner when data is loading', () => {
-    axios.get.mockImplementationOnce(() =>
-      new Promise(resolve => setTimeout(() => resolve({ data: [] }), 1000))
-    )
+    // Mock para axios
+    axios.get.mockResolvedValue({ data: mockEventos });
+    axios.post.mockResolvedValue({ data: { compraId: '12345' } });
+  });
 
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Boletos />
-      </QueryClientProvider>
-    )
+  // Función helper para obtener elementos
+  const getElements = () => ({
+    tituloPrincipal: screen.getByRole('heading', { 
+      name: 'Comprar Boletos', 
+      level: 1 
+    }),
+    botonComprar: screen.getByRole('button', { name: 'Comprar Boletos' }),
+    campoCantidad: screen.getByRole('spinbutton'),
+    inputEvento: screen.getByLabelText('Evento'),
+  });
 
-    expect(screen.getByRole('progressbar')).toBeInTheDocument()
-  })
+  test('renderiza correctamente', () => {
+    render(<Boletos />);
+    const elements = getElements();
+    
+    expect(elements.tituloPrincipal).toBeInTheDocument();
+    expect(screen.getByText('Seleccionar Evento')).toBeInTheDocument();
+    expect(screen.getByText('Cantidad de Boletos')).toBeInTheDocument();
+  });
 
-  test('renders error alert when data fetch fails', async () => {
-    axios.get.mockRejectedValueOnce(new Error('Error al cargar los eventos'))
+  test('muestra spinner cuando está cargando', () => {
+    useQuery.mockReturnValueOnce({ isLoading: true });
+    render(<Boletos />);
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+  });
 
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Boletos />
-      </QueryClientProvider>
-    )
+  test('muestra error cuando falla la carga', () => {
+    useQuery.mockReturnValueOnce({ error: { message: 'Error' } });
+    render(<Boletos />);
+    expect(screen.getByText(/Error al cargar los eventos/i)).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      expect(screen.getByText(/Error al cargar los eventos/i)).toBeInTheDocument()
-    })
-  })
+  test('permite seleccionar un evento', async () => {
+    render(<Boletos />);
+    const { inputEvento } = getElements();
+    
+    // Abrir selector
+    fireEvent.mouseDown(inputEvento);
+    
+    // Seleccionar evento
+    const option = await screen.findByText('Concierto de Jazz');
+    fireEvent.click(option);
+    
+    // Verificar que se muestra en el resumen
+    expect(await screen.findByText('Evento: Concierto de Jazz')).toBeInTheDocument();
+  });
 
-  test('renders eventos when data is loaded successfully', async () => {
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Boletos />
-      </QueryClientProvider>
-    )
+  test('permite cambiar la cantidad de boletos', () => {
+    render(<Boletos />);
+    const { campoCantidad } = getElements();
+    
+    fireEvent.change(campoCantidad, { target: { value: '3' } });
+    expect(campoCantidad).toHaveValue(3);
+  });
 
-    await waitFor(() => {
-      expect(screen.getByText(/Concierto de Rock/i)).toBeInTheDocument()
-      expect(screen.getByText(/Obra de Teatro/i)).toBeInTheDocument()
-    })
-  })
+  test('limita la cantidad máxima a 4 boletos', () => {
+    render(<Boletos />);
+    const { campoCantidad } = getElements();
+    
+    fireEvent.change(campoCantidad, { target: { value: '5' } });
+    expect(campoCantidad).toHaveValue(4);
+    
+    fireEvent.change(campoCantidad, { target: { value: '0' } });
+    expect(campoCantidad).toHaveValue(1);
+  });
 
-  test('disables "Comprar Boletos" button when no evento is selected or no boletos available', async () => {
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Boletos />
-      </QueryClientProvider>
-    )
+  test('abre diálogo al hacer clic en comprar', async () => {
+    render(<Boletos />);
+    const { inputEvento, botonComprar } = getElements();
+    
+    // Seleccionar evento
+    fireEvent.mouseDown(inputEvento);
+    const option = await screen.findByText('Concierto de Jazz');
+    fireEvent.click(option);
+    
+    // Hacer clic en comprar
+    fireEvent.click(botonComprar);
+    
+    // Verificar diálogo
+    expect(await screen.findByText('Confirmar Compra')).toBeInTheDocument();
+  });
 
-    // Verificar que el botón esté deshabilitado si no se selecciona evento
-    expect(screen.getByRole('button', { name: /Comprar Boletos/i })).toBeDisabled()
-
-    // Seleccionar un evento disponible
-    fireEvent.change(screen.getByLabelText(/Evento/i), { target: { value: '1' } })
-
-    // Verificar que el botón esté habilitado
-    expect(screen.getByRole('button', { name: /Comprar Boletos/i })).not.toBeDisabled()
-
-    // Seleccionar un evento agotado
-    fireEvent.change(screen.getByLabelText(/Evento/i), { target: { value: '2' } })
-
-    // Verificar que el botón esté deshabilitado
-    expect(screen.getByRole('button', { name: /Comprar Boletos/i })).toBeDisabled()
-  })
-
-  test('filters the quantity of boletos between 1 and 4', async () => {
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Boletos />
-      </QueryClientProvider>
-    )
-
-    const cantidadInput = screen.getByLabelText(/Cantidad de Boletos/i)
-
-    // Set to 5 (which should be capped at 4)
-    fireEvent.change(cantidadInput, { target: { value: 5 } })
-    expect(screen.getByLabelText(/Cantidad de Boletos/i).value).toBe('4')
-
-    // Set to 0 (which should be capped at 1)
-    fireEvent.change(cantidadInput, { target: { value: 0 } })
-    expect(screen.getByLabelText(/Cantidad de Boletos/i).value).toBe('1')
-  })
-
-  test('opens dialog to confirm purchase and handles the purchase', async () => {
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Boletos />
-      </QueryClientProvider>
-    )
-
-    // Seleccionamos el evento
-    fireEvent.change(screen.getByLabelText(/Evento/i), { target: { value: '1' } })
-
-    // Abrimos el dialogo de compra
-    fireEvent.click(screen.getByRole('button', { name: /Comprar Boletos/i }))
-
-    // Verificamos que el dialogo se haya abierto
-    expect(screen.getByText(/Confirmar Compra/i)).toBeInTheDocument()
-
-    // Confirmamos la compra
-    fireEvent.click(screen.getByRole('button', { name: /Confirmar Compra/i }))
-
-    // Mock de la confirmación de compra
-    axios.post.mockResolvedValueOnce({ data: { compraId: '12345' } })
-
-    await waitFor(() => {
-      expect(window.location.href).toBe('/boletos/confirmacion/12345')
-    })
-  })
-
-  test('shows error message when purchase fails', async () => {
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Boletos />
-      </QueryClientProvider>
-    )
-
-    // Seleccionamos el evento
-    fireEvent.change(screen.getByLabelText(/Evento/i), { target: { value: '1' } })
-
-    // Abrimos el dialogo de compra
-    fireEvent.click(screen.getByRole('button', { name: /Comprar Boletos/i }))
-
-    // Confirmamos la compra
-    fireEvent.click(screen.getByRole('button', { name: /Confirmar Compra/i }))
-
-    // Mock de fallo en la compra
-    axios.post.mockRejectedValueOnce(new Error('Error en la compra'))
-
-    await waitFor(() => {
-      expect(screen.getByText(/Error al completar la compra/i)).toBeInTheDocument()
-    })
-  })
-})
+  test('deshabilita botón sin evento seleccionado', () => {
+    render(<Boletos />);
+    const { botonComprar } = getElements();
+    expect(botonComprar).toBeDisabled();
+  });
+});

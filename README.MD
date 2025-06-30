@@ -2,12 +2,6 @@
 
 ¡Bienvenido al sistema del Teatro Mora Virtual! Esta aplicación integral está diseñada para gestionar eventos teatrales, permitir la interacción de la comunidad a través de un foro, y facilitar la compra de boletos y la gestión de una cola virtual. Desarrollado con una arquitectura moderna de Node.js/Express para el backend y React para el frontend, junto con PostgreSQL como base de datos.
 
-Hecho por: 
-- Sofia Bastias
-- Joaquin Lopez
-- Alvaro Sanchez
-- Claudio Varela
-
 ## Tabla de Contenidos
 - [Teatro Mora Virtual](#teatro-mora-virtual)
   - [Tabla de Contenidos](#tabla-de-contenidos)
@@ -29,7 +23,6 @@ Hecho por:
     - [Autenticación](#autenticación)
   - [Testing](#testing)
   - [Despliegue (Futuro)](#despliegue-futuro)
-  - [Despliegue e Integración Continua con Jenkins](#despliegue-e-integracion-continua-con-jenkins)
   - [Contribución](#contribución)
   - [📄 Licencia](#-licencia)
 

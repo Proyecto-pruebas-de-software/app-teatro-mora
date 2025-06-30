@@ -2,6 +2,8 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const helmet = require("helmet"); 
 const rateLimit = require("express-rate-limit");
+const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -14,13 +16,10 @@ const limiter = rateLimit({
 });
 
 // Middlewares
+app.use(cors());
 app.use(bodyParser.json({ limit: '10kb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '10kb' }));
-
-if (!isTestEnvironment) {
   app.use(helmet());
   app.use(limiter);
-}
 
 // Health check
 app.get("/", (req, res) => {
@@ -31,69 +30,39 @@ app.get("/", (req, res) => {
   });
 });
 
-// Rutas
-const routes = {
-  usuarios: require('./queries/queries_usuarios'),
-  actores: require('./queries/queries_actores'),
-  eventos: require('./queries/queries_eventos'),
-  cola: require('./queries/queries_colavirtual'),
-  mensajes: require('./queries/queries_mensajesforo'),
-  boletos: require('./queries/queries_boletos')
-};
+// Cargar rutas
+const authRoutes = require('./routes/auth');
+const eventosRoutes = require('./routes/eventos');
+const usuariosRoutes = require('./routes/usuarios');
+const actoresRoutes = require('./routes/actores');
+const colaRoutes = require('./routes/cola_virtual');
+const mensajesRoutes = require('./routes/mensajes');
+const boletosRoutes = require('./routes/boletos');
 
-const setupRoutes = (app, prefix, router) => {
-  if (!router) return;
-  if (router.getAll) app.get(`/${prefix}`, router.getAll);
-  if (router.getById) app.get(`/${prefix}/:id`, router.getById);
-  if (router.create) app.post(`/${prefix}`, router.create);
-  if (router.update) app.put(`/${prefix}/:id`, router.update);
-  if (router.delete) app.delete(`/${prefix}/:id`, router.delete);
+// Configurar rutas
+app.use('/api/auth', authRoutes);
+app.use('/api/eventos', eventosRoutes);
+app.use('/api/mensajes', mensajesRoutes);
+app.use('/api/usuarios', usuariosRoutes);
+app.use('/api/actores', actoresRoutes);
+app.use('/api/cola_virtual', colaRoutes);
+app.use('/api/boletos', boletosRoutes);
 
-  if (isTestEnvironment) {
-    console.log(`Rutas registradas para /${prefix}:`);
-    if (router.getAll) console.log(`  GET /${prefix}`);
-    if (router.getById) console.log(`  GET /${prefix}/:id`);
-    if (router.create) console.log(`  POST /${prefix}`);
-    if (router.update) console.log(`  PUT /${prefix}/:id`);
-    if (router.delete) console.log(`  DELETE /${prefix}/:id`);
-  }
-};
-
-Object.entries(routes).forEach(([name, router]) => {
-  setupRoutes(app, name, router);
-});
-
-// Manejo de errores
-app.use((err, req, res, next) => {
-  if (!isTestEnvironment) console.error(err.stack);
-  res.status(err.status || 500).json({
-    status: false,
-    code: err.status || 500,
-    message: err.message || 'Error interno del servidor',
-    error: isTestEnvironment ? undefined : err.stack
-  });
-});
-
-// 404 personalizada
+// 404 handler (must be after all other routes and before the central error handler)
 app.use((req, res) => {
-  const message = isTestEnvironment 
-    ? `Ruta no encontrada: ${req.method} ${req.originalUrl}`
-    : 'Ruta no encontrada';
-
   res.status(404).json({
     status: false,
-    code: 404,
-    message: message
+    message: 'Route not found'
   });
 });
 
-// === 👇 Aquí empieza lo importante ===
+// Importar y usar el manejador de errores centralizado
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
 
-let server = null;
-
-// Solo levanta el server si se ejecuta directamente (no durante testing)
-if (require.main === module) {
-  server = app.listen(port, () => {
+// Iniciar servidor solo si no es testing
+if (!isTestEnvironment) {
+  const server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   });
@@ -105,32 +74,14 @@ if (require.main === module) {
   });
 }
 
-// Para cerrar en test
-app.close = async () => {
-  const closePool = async (mod) => {
-    if (mod?.pool?.end) {
-      try {
-        await mod.pool.end();
-      } catch (e) {
-        console.error(`Error cerrando pool de ${mod}:`, e);
-      }
-    }
+// Para testing, agregamos un método para cerrar conexiones
+if (isTestEnvironment) {
+  app.close = async () => {
+    // Cierra conexiones a la base de datos si es necesario
+    // Each individual query module now exports its pool, so we could explicitly end them if necessary for testing.
+    // Example: if (actoresRoutes.pool) await actoresRoutes.pool.end();
+    // However, it's generally handled by the process exiting.
   };
+}
 
-  await Promise.all([
-    closePool(routes.actores),
-    closePool(routes.boletos),
-    closePool(routes.usuarios),
-    closePool(routes.eventos),
-    closePool(routes.mensajes),
-    closePool(routes.cola)
-  ]);
-
-  if (server) {
-    await new Promise(resolve => server.close(resolve));
-    console.log("Servidor cerrado correctamente.");
-  }
-};
-
-// ✅ Lo que necesitas exportar para los tests
 module.exports = app;
