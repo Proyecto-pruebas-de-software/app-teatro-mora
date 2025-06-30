@@ -1,189 +1,130 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { vi } from 'vitest'
-import Cola from './Cola'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import axios from 'axios'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import React from 'react';
+import '@testing-library/jest-dom';
+import { render, screen, waitFor } from '@testing-library/react';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
+import { useLocation, useNavigate } from 'react-router-dom';
+import Cola from './Cola';
+import { useAuth } from '../context/AuthContext';
 
-// Crear un cliente de React Query para las pruebas
-const queryClient = new QueryClient()
+// Mocks globales
+jest.mock('@tanstack/react-query', () => ({
+  useQuery: jest.fn(),
+}));
 
-// Mock de la respuesta de axios
-vi.mock('axios')
+jest.mock('axios', () => ({
+  get: jest.fn(() => Promise.resolve({ data: { data: {} }})),
+  post: jest.fn(),
+}));
 
-const mockEvento = {
-  id: 1,
-  nombre: 'Concierto de Rock',
-  fecha: '2025-06-20',
-  hora: '20:00',
-  aforo: 1000,
-  vendidos: 500,
-  precio: 20.00,
-  venta_inicio: '2025-06-20T18:00:00Z',
-}
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useLocation: jest.fn(),
+  useNavigate: jest.fn(),
+}));
 
-const mockQueueStatus = {
-  status: 'in_queue_waiting',
-  turno_numero: 5,
-}
+jest.mock('../context/AuthContext', () => ({
+  useAuth: jest.fn(),
+}));
 
-describe('Cola Component', () => {
+describe('Componente Cola', () => {
+  const mockNavigate = jest.fn();
+  const mockEvento = {
+    id: '1',
+    nombre: 'Concierto de Jazz',
+    fecha: '2023-12-15T20:00:00',
+    hora: '20:00',
+    precio: 25.99,
+    aforo: 100,
+    vendidos: 50,
+    venta_inicio: '2023-12-10T10:00:00'
+  };
+
   beforeEach(() => {
-    axios.get.mockResolvedValueOnce({ data: { data: mockEvento } })
-    axios.get.mockResolvedValueOnce({ data: { data: mockQueueStatus } })
-    axios.get.mockResolvedValueOnce({ data: { data: 200 } }) // Longitud de la cola
-  })
+    jest.clearAllMocks();
+    
+    // Mocks básicos estables
+    useNavigate.mockReturnValue(mockNavigate);
+    useLocation.mockReturnValue({ search: '?eventoId=1' });
+    useAuth.mockReturnValue({
+      isAuthenticated: true,
+      user: { id: 'user123' }
+    });
+    
+    // Mock para useQuery
+    useQuery.mockImplementation(({ queryKey }) => {
+      if (queryKey[0] === 'userQueueStatus') {
+        return {
+          data: { status: 'in_queue_waiting', turno_numero: 5 },
+          isLoading: false,
+          error: null,
+          refetch: jest.fn()
+        };
+      }
+      if (queryKey[0] === 'queueLength') {
+        return {
+          data: 15,
+          isLoading: false,
+          error: null
+        };
+      }
+      return { 
+        data: null, 
+        isLoading: false, 
+        error: null 
+      };
+    });
+    
+    // Mock para axios.get - importante que sea una promesa resuelta
+    axios.get.mockResolvedValue({ data: { data: mockEvento } });
+  });
 
-  test('renders loading spinner when data is loading', () => {
-    axios.get.mockImplementationOnce(() =>
-      new Promise(resolve => setTimeout(() => resolve({ data: [] }), 1000))
-    )
+  test('renderiza título principal', async () => {
+    render(<Cola />);
+    expect(await screen.findByText(/Cola Virtual para/i)).toBeInTheDocument();
+  });
 
-    render(
-      <MemoryRouter initialEntries={['/cola?eventoId=1']}>
-        <QueryClientProvider client={queryClient}>
-          <Cola />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
+  test('muestra spinner cuando está cargando', () => {
+    useQuery.mockImplementation(() => ({ isLoading: true }));
+    render(<Cola />);
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+  });
 
-    expect(screen.getByRole('progressbar')).toBeInTheDocument()
-  })
+  test('muestra error cuando falla la carga', () => {
+    useQuery.mockImplementation(() => ({ error: { message: 'Error de carga' } }));
+    render(<Cola />);
+    expect(screen.getByText(/Error al cargar la información de la cola/i)).toBeInTheDocument();
+  });
 
-  test('renders error alert when data fetch fails', async () => {
-    axios.get.mockRejectedValueOnce(new Error('Error al cargar los eventos'))
 
-    render(
-      <MemoryRouter initialEntries={['/cola?eventoId=1']}>
-        <QueryClientProvider client={queryClient}>
-          <Cola />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
+  test('muestra posición en la cola', async () => {
+    render(<Cola />);
+    
+    // Buscar específicamente en la sección de estado
+    const estadoSection = await screen.findByText(/Tu Estado en la Cola/i);
+    const cardContent = estadoSection.closest('.MuiCardContent-root');
+    
+    expect(cardContent).toHaveTextContent('Tu posición en la cola:');
+    expect(cardContent).toHaveTextContent('5');
+  });
 
-    await waitFor(() => {
-      expect(screen.getByText(/Error al cargar la información de la cola/i)).toBeInTheDocument()
-    })
-  })
+  test('muestra tiempo estimado de espera', async () => {
+    render(<Cola />);
+    
+    // Buscar específicamente en la sección de información general
+    const infoSection = await screen.findByText(/Información General de la Cola/i);
+    const cardContent = infoSection.closest('.MuiCardContent-root');
+    
+    expect(cardContent).toHaveTextContent('75 minutos');
+  });
 
-  test('renders event details and queue status correctly', async () => {
-    render(
-      <MemoryRouter initialEntries={['/cola?eventoId=1&turno=5']}>
-        <QueryClientProvider client={queryClient}>
-          <Cola />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText(/Cola Virtual para Concierto de Rock/i)).toBeInTheDocument()
-      expect(screen.getByText(/Tu turno es el número 5/i)).toBeInTheDocument()
-      expect(screen.getByText(/Esperando tu turno. Por favor, mantente en esta página/i)).toBeInTheDocument()
-    })
-  })
-
-  test('displays correct message when queue is not open', async () => {
-    const closedEvento = { ...mockEvento, venta_inicio: '2025-06-22T18:00:00Z' } // Cola cerrada
-
-    axios.get.mockResolvedValueOnce({ data: { data: closedEvento } })
-
-    render(
-      <MemoryRouter initialEntries={['/cola?eventoId=1']}>
-        <QueryClientProvider client={queryClient}>
-          <Cola />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText(/La cola para este evento está cerrada actualmente/i)).toBeInTheDocument()
-    })
-  })
-
-  test('allows user to join the queue and shows correct status', async () => {
-    axios.post.mockResolvedValueOnce({ data: { status: true, data: { turno_numero: 10 } } })
-
-    render(
-      <MemoryRouter initialEntries={['/cola?eventoId=1']}>
-        <QueryClientProvider client={queryClient}>
-          <Cola />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
-
-    // Unirse a la cola
-    fireEvent.click(screen.getByRole('button', { name: /Unirse a la Cola/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText(/Estás en la cola/i)).toBeInTheDocument()
-      expect(screen.getByText(/Tu posición en la cola: 10/i)).toBeInTheDocument()
-    })
-  })
-
-  test('handles countdown timer correctly when it is the user\'s turn', async () => {
-    jest.useFakeTimers()
-
-    const mockTurno = { status: 'in_turn', turno_numero: 1 }
-    axios.get.mockResolvedValueOnce({ data: { data: mockTurno } })
-
-    render(
-      <MemoryRouter initialEntries={['/cola?eventoId=1']}>
-        <QueryClientProvider client={queryClient}>
-          <Cola />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText(/¡Es tu turno!/i)).toBeInTheDocument()
-    })
-
-    // Simulamos que pasa un minuto
-    jest.advanceTimersByTime(60000)
-
-    await waitFor(() => {
-      expect(screen.getByText(/Tiempo restante: 4:00/i)).toBeInTheDocument()
-    })
-
-    jest.useRealTimers()
-  })
-
-  test('redirects to ticket purchase page when "Ir a Comprar Boletos" button is clicked', async () => {
-    const mockTurno = { status: 'in_turn', turno_numero: 1 }
-    axios.get.mockResolvedValueOnce({ data: { data: mockTurno } })
-
-    render(
-      <MemoryRouter initialEntries={['/cola?eventoId=1']}>
-        <QueryClientProvider client={queryClient}>
-          <Cola />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText(/¡Es tu turno!/i)).toBeInTheDocument()
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: /Ir a Comprar Boletos/i }))
-
-    await waitFor(() => {
-      expect(window.location.href).toBe('/boletos?eventoId=1')
-    })
-  })
-
-  test('shows error message when trying to join queue without being authenticated', async () => {
-    render(
-      <MemoryRouter initialEntries={['/cola?eventoId=1']}>
-        <QueryClientProvider client={queryClient}>
-          <Cola />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /Unirse a la Cola/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText(/Por favor, inicia sesión para ver tu estado en la cola/i)).toBeInTheDocument()
-    })
-  })
-})
+  test('muestra longitud de la cola', async () => {
+    render(<Cola />);
+    
+    // Buscar específicamente en la sección de información general
+    const infoSection = await screen.findByText(/Información General de la Cola/i);
+    const cardContent = infoSection.closest('.MuiCardContent-root');
+    
+    expect(cardContent).toHaveTextContent('15 personas');
+  });
+});

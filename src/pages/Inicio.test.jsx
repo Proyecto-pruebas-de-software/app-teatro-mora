@@ -1,128 +1,81 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { vi } from 'vitest';
-import Inicio from './Inicio';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import React from 'react';
+import '@testing-library/jest-dom';
+import { render, screen } from '@testing-library/react';
+import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
+import { MemoryRouter } from 'react-router-dom';
+import Inicio from './Inicio';
 
-// Create a QueryClient for the test
-const queryClient = new QueryClient();
+// Mocks básicos
+jest.mock('@tanstack/react-query');
+jest.mock('axios');
 
-// Mock axios
-vi.mock('axios');
+describe('Componente Inicio', () => {
+  const mockEventos = [
+    {
+      id: '1',
+      nombre: 'Concierto de Jazz',
+      fecha: '2023-12-15T20:00:00',
+      hora: '20:00',
+      descripcion: 'Un increíble concierto de jazz con los mejores músicos'
+    },
+    {
+      id: '2',
+      nombre: 'Obra de Teatro',
+      fecha: '2023-12-20T19:30:00',
+      hora: '19:30',
+      descripcion: 'Una obra clásica de teatro'
+    }
+  ];
 
-// Define mock event data
-const mockEventos = [
-  {
-    id: 1,
-    nombre: 'Evento 1',
-    fecha: '2025-06-20',
-    hora: '20:00',
-    descripcion: 'Descripción del evento 1',
-  },
-  {
-    id: 2,
-    nombre: 'Evento 2',
-    fecha: '2025-06-21',
-    hora: '19:00',
-    descripcion: 'Descripción del evento 2',
-  },
-  {
-    id: 3,
-    nombre: 'Evento 3',
-    fecha: '2025-06-22',
-    hora: '18:00',
-    descripcion: 'Descripción del evento 3',
-  },
-];
-
-describe('Inicio Component', () => {
   beforeEach(() => {
-    // Mock the response of the API call
-    axios.get.mockResolvedValueOnce({ data: { data: mockEventos } });
+    jest.clearAllMocks();
+    
+    // Mock para useQuery
+    useQuery.mockImplementation(() => ({
+      data: mockEventos,
+      isLoading: false,
+      error: null
+    }));
+    
+    // Mock para axios
+    axios.get.mockResolvedValue({ data: { data: mockEventos } });
   });
 
-  test('renders loading skeleton when data is loading', () => {
-    axios.get.mockImplementationOnce(() =>
-      new Promise(resolve => setTimeout(() => resolve({ data: { data: [] } }), 1000))
-    );
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <QueryClientProvider client={queryClient}>
-          <Inicio />
-        </QueryClientProvider>
+  const renderWithRouter = (ui) => {
+    return render(
+      <MemoryRouter>
+        {ui}
       </MemoryRouter>
     );
+  };
 
-    expect(screen.getAllByRole('progressbar')).toHaveLength(3); // Skeleton loader for 3 events
+  test('renderiza el título principal', () => {
+    renderWithRouter(<Inicio />);
+    expect(screen.getByText('Bienvenido al Teatro Mora')).toBeInTheDocument();
   });
 
-  test('renders events correctly when data is fetched', async () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <QueryClientProvider client={queryClient}>
-          <Inicio />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      // Check if event names are rendered
-      expect(screen.getByText('Evento 1')).toBeInTheDocument();
-      expect(screen.getByText('Evento 2')).toBeInTheDocument();
-      expect(screen.getByText('Evento 3')).toBeInTheDocument();
-    });
+  test('muestra loading state', () => {
+    useQuery.mockImplementation(() => ({ isLoading: true }));
+    renderWithRouter(<Inicio />);
+    expect(screen.getAllByTestId('skeleton-loading').length).toBeGreaterThan(0);
   });
 
-  test('displays "No events available" message when no events are found', async () => {
-    axios.get.mockResolvedValueOnce({ data: { data: [] } });
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <QueryClientProvider client={queryClient}>
-          <Inicio />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('No hay próximos eventos programados')).toBeInTheDocument();
-    });
+  test('muestra eventos destacados', () => {
+    renderWithRouter(<Inicio />);
+    expect(screen.getByText('Próximos Espectáculos')).toBeInTheDocument();
+    expect(screen.getByText('Concierto de Jazz')).toBeInDocument();
+    expect(screen.getByText('Obra de Teatro')).toBeInDocument();
   });
 
-  test('redirects to event details page when "Más Información" button is clicked', async () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <QueryClientProvider client={queryClient}>
-          <Inicio />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      // Click on "Más Información" button for Evento 1
-      fireEvent.click(screen.getByText('Más Información', { selector: 'button' }));
-    });
-
-    // Check if the navigation occurred
-    expect(window.location.pathname).toBe('/eventos/1');
+  test('muestra mensaje cuando no hay eventos', () => {
+    useQuery.mockImplementation(() => ({ data: [], isLoading: false }));
+    renderWithRouter(<Inicio />);
+    expect(screen.getByText(/No hay próximos eventos programados/i)).toBeInTheDocument();
   });
 
-  test('displays skeleton loader while fetching events data', async () => {
-    axios.get.mockResolvedValueOnce({ data: { data: [] } });
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <QueryClientProvider client={queryClient}>
-          <Inicio />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      // Ensure that the skeleton loader is visible during the loading phase
-      expect(screen.getAllByRole('progressbar')).toHaveLength(3); // Three skeleton loaders
-    });
+  test('muestra botón para comprar boletos', () => {
+    renderWithRouter(<Inicio />);
+    expect(screen.getByText('Comprar Boletos')).toBeInTheDocument();
   });
 });

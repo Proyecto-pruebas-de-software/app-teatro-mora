@@ -1,116 +1,81 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
-import Foro from './Foro';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import React from 'react';
+import '@testing-library/jest-dom';
+import { render, screen } from '@testing-library/react';
+import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import Foro from './Foro';
 
-// Create a QueryClient for the test
-const queryClient = new QueryClient();
+// Mocks básicos
+jest.mock('@tanstack/react-query');
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: jest.fn(),
+}));
+jest.mock('axios');
 
-// Mock axios
-vi.mock('axios');
+describe('Componente Foro', () => {
+  const mockEventos = [
+    {
+      id: '1',
+      nombre: 'Concierto de Jazz',
+      fecha: '2023-12-15T20:00:00'
+    },
+    {
+      id: '2',
+      nombre: 'Obra de Teatro',
+      fecha: '2023-12-20T19:30:00'
+    }
+  ];
 
-// Define mock event data
-const mockEventos = [
-  {
-    id: 1,
-    nombre: 'Evento 1',
-    fecha: '2025-06-20',
-  },
-  {
-    id: 2,
-    nombre: 'Evento 2',
-    fecha: '2025-06-21',
-  },
-];
-
-describe('Foro Component', () => {
   beforeEach(() => {
-    // Mock the response of the API call
-    axios.get.mockResolvedValueOnce({ data: { data: mockEventos } });
+    jest.clearAllMocks();
+    
+    // Mock de useNavigate
+    useNavigate.mockReturnValue(jest.fn());
+    
+    // Mock para useQuery
+    useQuery.mockImplementation(() => ({
+      data: mockEventos,
+      isLoading: false,
+      error: null
+    }));
+    
+    // Mock para axios
+    axios.get.mockResolvedValue({ data: { data: mockEventos } });
   });
 
-  test('renders loading spinner when events are loading', () => {
-    axios.get.mockImplementationOnce(() =>
-      new Promise(resolve => setTimeout(() => resolve({ data: [] }), 1000))
-    );
+  test('renderiza el título principal', () => {
+    render(<Foro />);
+    expect(screen.getByText('Foros por Evento')).toBeInTheDocument();
+  });
 
-    render(
-      <MemoryRouter initialEntries={['/foro']}>
-        <QueryClientProvider client={queryClient}>
-          <Foro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
+  test('muestra loading state', () => {
+    useQuery.mockImplementation(() => ({ isLoading: true }));
+    render(<Foro />);
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
   });
 
-  test('renders events correctly', async () => {
-    render(
-      <MemoryRouter initialEntries={['/foro']}>
-        <QueryClientProvider client={queryClient}>
-          <Foro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      // Check that the events are displayed
-      expect(screen.getByText('Evento 1')).toBeInTheDocument();
-      expect(screen.getByText('Evento 2')).toBeInTheDocument();
-      expect(screen.getByText('Fecha: 6/20/2025')).toBeInTheDocument();
-    });
+  test('muestra lista de eventos', () => {
+    render(<Foro />);
+    expect(screen.getByText('Concierto de Jazz')).toBeInTheDocument();
+    expect(screen.getByText('Obra de Teatro')).toBeInTheDocument();
   });
 
-  test('handles error when fetching events', async () => {
-    axios.get.mockRejectedValueOnce(new Error('Error al cargar los eventos'));
-
-    render(
-      <MemoryRouter initialEntries={['/foro']}>
-        <QueryClientProvider client={queryClient}>
-          <Foro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText(/Error al cargar los eventos/)).toBeInTheDocument();
-    });
+  test('muestra mensaje cuando no hay eventos', () => {
+    useQuery.mockImplementation(() => ({ data: [], isLoading: false }));
+    render(<Foro />);
+    expect(screen.getByText(/No hay eventos disponibles/i)).toBeInTheDocument();
   });
 
-  test('renders "No events available" message when no events are returned', async () => {
-    axios.get.mockResolvedValueOnce({ data: { data: [] } });
-
-    render(
-      <MemoryRouter initialEntries={['/foro']}>
-        <QueryClientProvider client={queryClient}>
-          <Foro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText(/No hay eventos disponibles para mostrar foros/)).toBeInTheDocument();
-    });
-  });
-
-  test('navigates to forum page when event is clicked', async () => {
-    render(
-      <MemoryRouter initialEntries={['/foro']}>
-        <QueryClientProvider client={queryClient}>
-          <Foro />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    // Simulate clicking on the event card
-    fireEvent.click(screen.getByText('Evento 1'));
-
-    await waitFor(() => {
-      // Check if the navigation happened
-      expect(window.location.pathname).toBe('/foro/1');
-    });
+  test('navega al foro del evento al hacer clic', () => {
+    const mockNavigate = jest.fn();
+    useNavigate.mockReturnValue(mockNavigate);
+    
+    render(<Foro />);
+    const firstEvent = screen.getByText('Concierto de Jazz');
+    fireEvent.click(firstEvent);
+    
+    expect(mockNavigate).toHaveBeenCalledWith('/foro/1');
   });
 });

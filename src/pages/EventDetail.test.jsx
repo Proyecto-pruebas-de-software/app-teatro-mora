@@ -1,147 +1,147 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { vi } from 'vitest'
-import EventDetail from './EventDetail'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import axios from 'axios'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import React from 'react';
+import '@testing-library/jest-dom';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { useQuery } from '@tanstack/react-query';
+import { useParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import EventDetail from './EventDetail';
 
-// Crear un cliente de React Query para las pruebas
-const queryClient = new QueryClient()
+// Mocks globales
+jest.mock('@tanstack/react-query');
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useParams: jest.fn(),
+  useNavigate: jest.fn(),
+}));
+jest.mock('axios');
 
-// Mock de la respuesta de axios
-vi.mock('axios')
+describe('Componente EventDetail', () => {
+  let mockNavigate;
+  const mockEvent = {
+    id: '1',
+    nombre: 'Concierto de Jazz',
+    fecha: '2023-12-15T20:00:00',
+    hora: '20:00',
+    precio: 25.99,
+    descripcion: 'Un increíble concierto de jazz con los mejores músicos',
+    duracion: 120,
+    edad_recomendada: 'Para todas las edades',
+    como_llegar: 'Teatro Principal, Calle Falsa 123',
+    elenco: 'John Coltrane, Miles Davis, Ella Fitzgerald',
+    imagen_url: 'https://example.com/event.jpg'
+  };
 
-const mockEvento = {
-  id: 1,
-  nombre: 'Concierto de Comedia',
-  fecha: '2025-06-20',
-  hora: '20:00',
-  descripcion: 'Una noche llena de risas y diversión.',
-  precio: 15.0,
-  duracion: 90,
-  edad_recomendada: '18+',
-  como_llegar: 'Av. Siempre Viva 123',
-  elenco: 'Comediante X, Comediante Y',
-  imagen_url: 'https://placeimg.com/500/500/tech',
-  venta_inicio: '2025-06-19T18:00:00Z',
-}
-
-describe('EventDetail Component', () => {
   beforeEach(() => {
-    axios.get.mockResolvedValueOnce({ data: { data: mockEvento } })
-  })
+    jest.clearAllMocks();
+    
+    // Mock de useNavigate
+    mockNavigate = jest.fn();
+    useNavigate.mockReturnValue(mockNavigate);
+    
+    // Mock de useParams
+    useParams.mockReturnValue({ id: '1' });
+    
+    // Mock para useQuery
+    useQuery.mockImplementation(({ queryKey, queryFn }) => ({
+      data: queryKey[0] === 'eventoDetalle' ? mockEvent : null,
+      isLoading: false,
+      error: null,
+    }));
+    
+    // Mock para axios
+    axios.get.mockResolvedValue({ data: { data: mockEvent } });
+  });
 
-  test('renders loading spinner when data is loading', () => {
-    axios.get.mockImplementationOnce(() =>
-      new Promise(resolve => setTimeout(() => resolve({ data: [] }), 1000))
-    )
+  test('renderiza título principal cuando hay datos', async () => {
+    render(<EventDetail />);
+    expect(await screen.findByText('Concierto de Jazz')).toBeInTheDocument();
+  });
 
-    render(
-      <MemoryRouter initialEntries={['/eventos/1']}>
-        <QueryClientProvider client={queryClient}>
-          <EventDetail />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
+  test('muestra loading state', async () => {
+    useQuery.mockImplementation(() => ({ isLoading: true }));
+    render(<EventDetail />);
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+  });
 
-    expect(screen.getByRole('progressbar')).toBeInTheDocument()
-  })
+  test('muestra error cuando falla la carga', async () => {
+    useQuery.mockImplementation(() => ({ error: { message: 'Error de carga' } }));
+    render(<EventDetail />);
+    expect(await screen.findByText(/Error al cargar los detalles del evento/i)).toBeInTheDocument();
+  });
 
-  test('renders error alert when data fetch fails', async () => {
-    axios.get.mockRejectedValueOnce(new Error('Error al cargar el evento'))
+  test('muestra mensaje cuando no hay evento', async () => {
+    useQuery.mockImplementation(() => ({ data: null }));
+    render(<EventDetail />);
+    expect(await screen.findByText(/Evento no encontrado/i)).toBeInTheDocument();
+  });
 
-    render(
-      <MemoryRouter initialEntries={['/eventos/1']}>
-        <QueryClientProvider client={queryClient}>
-          <EventDetail />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
-
+  test('muestra información básica del evento', async () => {
+    render(<EventDetail />);
     await waitFor(() => {
-      expect(screen.getByText(/Error al cargar los detalles del evento. Por favor, intente más tarde/i)).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText(/Fecha:/i)).toHaveTextContent('15-12-2023');
+      expect(screen.getByText(/Hora:/i)).toHaveTextContent('20:00');
+      expect(screen.getByText(/25.99/i)).toBeInTheDocument();
+      expect(screen.getByText(/Para todas las edades/i)).toBeInTheDocument();
+    });
+  });
 
-  test('renders event details correctly', async () => {
-    render(
-      <MemoryRouter initialEntries={['/eventos/1']}>
-        <QueryClientProvider client={queryClient}>
-          <EventDetail />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
+  test('muestra la imagen del evento', async () => {
+    render(<EventDetail />);
+    const image = await screen.findByRole('img');
+    expect(image).toHaveAttribute('src', 'https://example.com/event.jpg');
+    expect(image).toHaveAttribute('alt', 'Concierto de Jazz');
+  });
 
-    await waitFor(() => {
-      expect(screen.getByText(/Concierto de Comedia/i)).toBeInTheDocument()
-      expect(screen.getByText(/Fecha: 20\/06\/2025/i)).toBeInTheDocument()
-      expect(screen.getByText(/Hora: 20:00/i)).toBeInTheDocument()
-      expect(screen.getByText(/Descripción: Una noche llena de risas y diversión/i)).toBeInTheDocument()
-      expect(screen.getByText(/Precio: \$15.00/i)).toBeInTheDocument()
-    })
-  })
+  test('muestra botones de acción', async () => {
+    render(<EventDetail />);
+    expect(await screen.findByText(/Comprar Entradas/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ir al Foro/i)).toBeInTheDocument();
+    expect(screen.getByText(/← Volver a Eventos/i)).toBeInTheDocument();
+  });
 
-  test('renders correct event information when evento not found', async () => {
-    axios.get.mockResolvedValueOnce({ data: { data: null } })
+  test('navega a la página de cola al hacer clic en Comprar Entradas', async () => {
+    render(<EventDetail />);
+    const buyButton = await screen.findByText(/Comprar Entradas/i);
+    fireEvent.click(buyButton);
+    expect(mockNavigate).toHaveBeenCalledWith('/cola?eventoId=1');
+  });
 
-    render(
-      <MemoryRouter initialEntries={['/eventos/1']}>
-        <QueryClientProvider client={queryClient}>
-          <EventDetail />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
+  test('navega al foro al hacer clic en Ir al Foro', async () => {
+    render(<EventDetail />);
+    const forumButton = await screen.findByText(/Ir al Foro/i);
+    fireEvent.click(forumButton);
+    expect(mockNavigate).toHaveBeenCalledWith('/foro/1');
+  });
 
-    await waitFor(() => {
-      expect(screen.getByText(/Evento no encontrado/i)).toBeInTheDocument()
-    })
-  })
+  test('navega atrás al hacer clic en Volver a Eventos', async () => {
+    render(<EventDetail />);
+    const backButton = await screen.findByText(/← Volver a Eventos/i);
+    fireEvent.click(backButton);
+    expect(mockNavigate).toHaveBeenCalledWith('/eventos');
+  });
 
-  test('navigates to the list of events when "Volver a Eventos" button is clicked', async () => {
-    render(
-      <MemoryRouter initialEntries={['/eventos/1']}>
-        <QueryClientProvider client={queryClient}>
-          <EventDetail />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
+  test('muestra sección "Acerca de este evento"', async () => {
+    render(<EventDetail />);
+    expect(await screen.findByText(/Acerca de este evento/i)).toBeInTheDocument();
+    expect(screen.getByText(/Un increíble concierto de jazz/i)).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: /Volver a Eventos/i }))
+  test('muestra información adicional si está disponible', async () => {
+    render(<EventDetail />);
+    expect(await screen.findByText(/Duración: 120 minutos/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cómo llegar: Teatro Principal/i)).toBeInTheDocument();
+    expect(screen.getByText(/Elenco: John Coltrane/i)).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/eventos')
-    })
-  })
-
-  test('navigates to the ticket queue when "Comprar Entradas" button is clicked', async () => {
-    render(
-      <MemoryRouter initialEntries={['/eventos/1']}>
-        <QueryClientProvider client={queryClient}>
-          <EventDetail />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /Comprar Entradas/i }))
-
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/cola')
-    })
-  })
-
-  test('navigates to the event forum when "Ir al Foro" button is clicked', async () => {
-    render(
-      <MemoryRouter initialEntries={['/eventos/1']}>
-        <QueryClientProvider client={queryClient}>
-          <EventDetail />
-        </QueryClientProvider>
-      </MemoryRouter>
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /Ir al Foro/i }))
-
-    await waitFor(() => {
-      expect(window.location.pathname).toBe('/foro/1')
-    })
-  })
-})
+  test('usa placeholder image cuando no hay imagen_url', async () => {
+    const mockEventWithoutImage = {
+      ...mockEvent,
+      imagen_url: null
+    };
+    useQuery.mockImplementation(() => ({ data: mockEventWithoutImage }));
+    
+    render(<EventDetail />);
+    const image = await screen.findByRole('img');
+    expect(image).toHaveAttribute('src', '/placeholder_event_detail.jpg');
+  });
+});

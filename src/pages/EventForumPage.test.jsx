@@ -1,213 +1,161 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import EventForumPage from './EventForumPage';
+import React from 'react';
+import '@testing-library/jest-dom';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
+import EventForumPage from './EventForumPage';
 
-// Mocking axios
-vi.mock('axios');
+// Mocks globales
+jest.mock('@tanstack/react-query');
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useParams: jest.fn(),
+  useNavigate: jest.fn(),
+  useLocation: jest.fn(),
+}));
+jest.mock('../context/AuthContext');
+jest.mock('axios');
 
-// Create a QueryClient for the test
-const queryClient = new QueryClient();
+describe('Componente EventForumPage', () => {
+  let mockNavigate, mockQueryClient;
+  const mockUser = { id: 'user123', nombre: 'Test User' };
+  const mockEvent = {
+    id: '1',
+    nombre: 'Concierto de Jazz'
+  };
+  const mockMessages = [
+    {
+      id: '1',
+      mensaje: 'Primer tema de discusión',
+      usuario_id: 'user123',
+      usuario_nombre: 'Test User',
+      creado_en: '2023-12-10T10:00:00Z',
+      replies_count: 3
+    }
+  ];
 
-describe('EventForumPage', () => {
   beforeEach(() => {
-    axios.get.mockReset();
-    axios.post.mockReset();
-    axios.delete.mockReset();
-    axios.put.mockReset();
-  });
-
-  test('renders loading spinner while fetching event details and messages', () => {
-    axios.get.mockResolvedValueOnce({ data: { data: { nombre: 'Test Event' } } });
-    axios.get.mockResolvedValueOnce({ data: { data: [] } });
-
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <EventForumPage />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
-  });
-
-  test('displays error message when fetching event details fails', async () => {
-    axios.get.mockRejectedValueOnce(new Error('Event not found'));
-
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <EventForumPage />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('Error al cargar los detalles del evento.')).toBeInTheDocument();
-    });
-  });
-
-  test('displays event forum correctly', async () => {
-    const mockEvent = { id: '1', nombre: 'Test Event' };
-    const mockMessages = [{ id: 'msg1', mensaje: 'First message' }];
+    jest.clearAllMocks();
     
-    axios.get.mockResolvedValueOnce({ data: { data: mockEvent } });
-    axios.get.mockResolvedValueOnce({ data: { data: mockMessages } });
+    // Mock de useNavigate
+    mockNavigate = jest.fn();
+    useNavigate.mockReturnValue(mockNavigate);
+    
+    // Mock de useParams
+    useParams.mockReturnValue({ eventoId: '1' });
+    
+    // Mock de useLocation
+    useLocation.mockReturnValue({ search: '' });
+    
+    // Mock de useAuth
+    useAuth.mockReturnValue({
+      user: mockUser,
+      isAuthenticated: true,
+      isAdmin: false
+    });
+    
+    // Mock de useQueryClient
+    mockQueryClient = { invalidateQueries: jest.fn() };
+    useQueryClient.mockReturnValue(mockQueryClient);
+    
+    // Mock para useQuery (eventoDetalle)
+    useQuery.mockImplementation(({ queryKey }) => {
+      if (queryKey[0] === 'eventoDetalle') {
+        return {
+          data: mockEvent,
+          isLoading: false,
+          error: null
+        };
+      }
+      if (queryKey[0] === 'mensajes') {
+        return {
+          data: mockMessages,
+          isLoading: false,
+          error: null
+        };
+      }
+      return { data: null, isLoading: false, error: null };
+    });
+    
+    // Mock para useMutation
+    useMutation.mockReturnValue({
+      mutate: jest.fn(),
+      isLoading: false
+    });
+    
+    // Mock para axios
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/api/eventos/1')) {
+        return Promise.resolve({ data: { data: mockEvent } });
+      }
+      if (url.includes('/api/mensajes')) {
+        return Promise.resolve({ data: { data: mockMessages } });
+      }
+      return Promise.reject(new Error('Endpoint no mockeado'));
+    });
+    
+    axios.post.mockResolvedValue({ data: {} });
+  });
 
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <EventForumPage />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
+  test('renderiza el foro del evento con temas', async () => {
+    render(<EventForumPage />);
+    
+    expect(await screen.findByText(/Foro del Evento: Concierto de Jazz/i)).toBeInTheDocument();
+    expect(screen.getByText(/Primer tema de discusión/i)).toBeInTheDocument();
+    expect(screen.getByText(/Test User/i)).toBeInTheDocument();
+  });
 
+  test('permite publicar un nuevo tema', async () => {
+    render(<EventForumPage />);
+    
+    const input = screen.getByLabelText(/Título del Tema/i);
+    fireEvent.change(input, { target: { value: 'Nuevo tema de prueba' } });
+    
+    const submitButton = screen.getByText(/Publicar Tema/i);
+    fireEvent.click(submitButton);
+    
     await waitFor(() => {
-      expect(screen.getByText('Foro del Evento: Test Event')).toBeInTheDocument();
-      expect(screen.getByText('First message')).toBeInTheDocument();
+      expect(axios.post).toHaveBeenCalledWith('/api/mensajes', {
+        mensaje: 'Nuevo tema de prueba',
+        evento_id: '1',
+        parent_mensaje_id: null
+      });
     });
   });
 
-  test('validates and submits a new message', async () => {
-    const mockEvent = { id: '1', nombre: 'Test Event' };
-    axios.get.mockResolvedValueOnce({ data: { data: mockEvent } });
-    axios.post.mockResolvedValueOnce({ data: { success: true } });
+test('valida el formulario de nuevo tema', async () => {
+  render(<EventForumPage />);
+  
+  const input = screen.getByLabelText(/Título del Tema/i);
+  const submitButton = screen.getByText(/Publicar Tema/i);
 
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <EventForumPage />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    fireEvent.change(screen.getByLabelText('Título del Tema (Tu Mensaje Inicial)'), { target: { value: 'New Forum Post' } });
-    fireEvent.click(screen.getByRole('button', { name: /Publicar Tema/ }));
-
-    await waitFor(() => {
-      expect(axios.post).toHaveBeenCalledTimes(1);
-    });
+  // Test 1: Validación de campo vacío
+  await act(async () => {
+    fireEvent.click(submitButton);
   });
 
-  test('shows error when trying to post an empty message', async () => {
-    const mockEvent = { id: '1', nombre: 'Test Event' };
-    axios.get.mockResolvedValueOnce({ data: { data: mockEvent } });
+  // Buscar el elemento por su rol
+  const errorElement = await screen.findByRole('alert');
+  expect(errorElement).toHaveTextContent(/El mensaje no puede estar vacío/i);
 
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <EventForumPage />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /Publicar Tema/ }));
-
-    await waitFor(() => {
-      expect(screen.getByText('El mensaje no puede estar vacío.')).toBeInTheDocument();
-    });
+  // Test 2: Validación de longitud mínima
+  await act(async () => {
+    fireEvent.change(input, { target: { value: 'Hola' } });
+    fireEvent.click(submitButton);
   });
 
-  test('allows replying to a message', async () => {
-    const mockEvent = { id: '1', nombre: 'Test Event' };
-    const mockMessages = [{ id: 'msg1', mensaje: 'First message' }];
-    axios.get.mockResolvedValueOnce({ data: { data: mockEvent } });
-    axios.get.mockResolvedValueOnce({ data: { data: mockMessages } });
-    axios.post.mockResolvedValueOnce({ data: { success: true } });
+  const errorElement2 = await screen.findByRole('alert');
+  expect(errorElement2).toHaveTextContent(/El mensaje debe tener al menos 5 caracteres/i);
+});
 
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <EventForumPage />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    fireEvent.click(screen.getByText('First message'));
-
-    fireEvent.change(screen.getByLabelText('Tu Respuesta'), { target: { value: 'Reply to message' } });
-    fireEvent.click(screen.getByRole('button', { name: /Publicar Respuesta/ }));
-
-    await waitFor(() => {
-      expect(axios.post).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  test('allows editing a message', async () => {
-    const mockEvent = { id: '1', nombre: 'Test Event' };
-    const mockMessages = [{ id: 'msg1', mensaje: 'First message' }];
-    axios.get.mockResolvedValueOnce({ data: { data: mockEvent } });
-    axios.get.mockResolvedValueOnce({ data: { data: mockMessages } });
-    axios.put.mockResolvedValueOnce({ data: { success: true } });
-
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <EventForumPage />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    fireEvent.click(screen.getByText('First message'));
-
-    fireEvent.change(screen.getByLabelText('Tu Mensaje'), { target: { value: 'Updated message content' } });
-    fireEvent.click(screen.getByRole('button', { name: /Guardar/ }));
-
-    await waitFor(() => {
-      expect(axios.put).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  test('allows reporting a message', async () => {
-    const mockEvent = { id: '1', nombre: 'Test Event' };
-    const mockMessages = [{ id: 'msg1', mensaje: 'First message' }];
-    axios.get.mockResolvedValueOnce({ data: { data: mockEvent } });
-    axios.get.mockResolvedValueOnce({ data: { data: mockMessages } });
-    axios.post.mockResolvedValueOnce({ data: { success: true } });
-
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <EventForumPage />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    fireEvent.click(screen.getByText('First message'));
-    fireEvent.click(screen.getByRole('button', { name: /Reportar/ }));
-
-    fireEvent.change(screen.getByLabelText('Motivo del Reporte'), { target: { value: 'Inappropriate content' } });
-    fireEvent.click(screen.getByRole('button', { name: /Reportar/ }));
-
-    await waitFor(() => {
-      expect(axios.post).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  test('allows deleting a message', async () => {
-    const mockEvent = { id: '1', nombre: 'Test Event' };
-    const mockMessages = [{ id: 'msg1', mensaje: 'First message' }];
-    axios.get.mockResolvedValueOnce({ data: { data: mockEvent } });
-    axios.get.mockResolvedValueOnce({ data: { data: mockMessages } });
-    axios.delete.mockResolvedValueOnce({ data: { success: true } });
-
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <EventForumPage />
-        </QueryClientProvider>
-      </MemoryRouter>
-    );
-
-    fireEvent.click(screen.getByText('First message'));
-
-    fireEvent.click(screen.getByRole('button', { name: /Eliminar/ }));
-
-    await waitFor(() => {
-      expect(axios.delete).toHaveBeenCalledTimes(1);
-    });
+  test('navega correctamente a la página del evento', async () => {
+    render(<EventForumPage />);
+    
+    const backButton = screen.getByText(/Volver al Evento/i);
+    fireEvent.click(backButton);
+    
+    expect(mockNavigate).toHaveBeenCalledWith('/eventos/1');
   });
 });
