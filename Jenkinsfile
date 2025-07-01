@@ -3,9 +3,8 @@ pipeline {
   environment {
     NODE_ENV = 'development'
   }
-  options {
-    skipStagesAfterUnstable()
-  }
+
+  // REMOVIDO skipStagesAfterUnstable()
 
   tools {
     nodejs 'node24'
@@ -95,6 +94,12 @@ pipeline {
     }
     failure {
       echo '❌ El pipeline falló.'
+    }
+    unstable {
+      echo '⚠️ CI/CD completado con estado UNSTABLE.'
+    }
+    always {
+      echo '📦 Finalizando ejecución del pipeline.'
     }
   }
 }
