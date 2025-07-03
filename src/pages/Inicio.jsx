@@ -67,6 +67,7 @@ function Inicio() {
               Ver Eventos
             </Button> */}
             <Button
+              data-testid="btn-comprar-boletos"
               component={RouterLink}
               to="/boletos"
               variant="outlined"
@@ -129,6 +130,7 @@ function Inicio() {
                   </CardContent>
                   <CardActions sx={{ mt: 'auto' }}>
                     <Button
+                      data-testid="btn-mas-info"
                       component={RouterLink}
                       to={`/eventos/${evento.id}`}
                       variant="contained"

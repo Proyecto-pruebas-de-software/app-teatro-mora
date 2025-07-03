@@ -7,9 +7,13 @@
     "@mui/material": "^5.15.10",
     "@tanstack/react-query": "^5.20.5",
     "axios": "^1.6.7",
+    "chai": "^5.2.0",
+    "geckodriver": "^5.0.0",
+    "mocha": "^11.7.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.1"
+    "react-router-dom": "^6.22.1",
+    "selenium-webdriver": "^4.34.0"
   },
   "devDependencies": {
     "@babel/core": "^7.27.7",
@@ -42,8 +46,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:debug": "node --inspect-brk ./node_modules/jest/bin/jest.js --runInBand"
-  },
+    "test:debug": "node --inspect-brk ./node_modules/jest/bin/jest.js --runInBand",
+    "test:e2e": "mocha src/tests/e2e/*.test.js --exit --reporter spec"  },
   "jest": {
     "testEnvironment": "jsdom",
     "setupFilesAfterEnv": [
