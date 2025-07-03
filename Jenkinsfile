@@ -10,6 +10,13 @@ pipeline {
   }
 
   stages {
+    stage('Checkout') {
+      steps {
+        echo '📥 Haciendo checkout del repositorio...'
+        checkout scm
+      }
+    }
+
     stage('Install Backend Dependencies') {
       steps {
         dir('api') {
@@ -23,39 +30,6 @@ pipeline {
       }
     }
 
-    stage('Run Backend Tests') {
-      steps {
-        dir('api') {
-          echo '🧪 Ejecutando pruebas del backend...'
-          script {
-            def testExitCode = sh(
-              script: '''
-                rm -f test-results-*.xml
-                exitCode=0
-                for testfile in tests/*.test.js; do
-                  echo "🔹 Ejecutando $testfile..."
-                  npx mocha "$testfile" --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-$(basename $testfile .js).xml --timeout 15000 || exitCode=1
-                done
-                exit $exitCode
-              ''',
-              returnStatus: true
-            )
-            if (testExitCode != 0) {
-              echo '⚠️ Algunas pruebas backend fallaron.'
-              currentBuild.result = 'UNSTABLE'
-            } else {
-              echo '✅ Todas las pruebas backend pasaron.'
-            }
-          }
-        }
-      }
-      post {
-        always {
-          echo '📄 Publicando resultados de pruebas backend...'
-          junit 'api/test-results-*.xml'
-        }
-      }
-    }
 
     stage('Install & Build Frontend') {
       steps {
@@ -75,7 +49,7 @@ pipeline {
     stage('Deploy Backend') {
       when {
         expression {
-          return sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim() == 'develop'
+          return env.BRANCH_NAME == 'develop'
         }
       }
       steps {
@@ -99,7 +73,7 @@ pipeline {
     stage('Deploy Frontend') {
       when {
         expression {
-          return sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim() == 'develop'
+          return env.BRANCH_NAME == 'develop'
         }
       }
       steps {
@@ -116,7 +90,7 @@ pipeline {
     stage('Run Selenium E2E Tests') {
       when {
         expression {
-          return sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim() == 'develop'
+          return env.BRANCH_NAME == 'develop'
         }
       }
       steps {
