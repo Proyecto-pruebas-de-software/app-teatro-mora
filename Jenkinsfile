@@ -3,6 +3,7 @@ pipeline {
 
   environment {
     NODE_ENV = 'development'
+    DEPLOY_PATH = '/home/azureuser/app-teatro-mora'
   }
 
   tools {
@@ -10,51 +11,54 @@ pipeline {
   }
 
   stages {
-    stage('Test Backend') {
+
+    stage('Backend: Install & Test') {
       steps {
         dir('api') {
           echo '📦 Instalando dependencias del backend...'
           sh 'rm -rf node_modules package-lock.json'
           sh 'npm install'
-          sh 'npm install --save-dev mocha chai mocha-junit-reporter'
+          sh 'npm install --save-dev mocha chai mocha-junit-reporter selenium-webdriver'
 
           echo '🧪 Ejecutando pruebas del backend...'
           script {
-            def testExitCode = sh(
+            def exitCode = sh (
               script: '''
                 rm -f test-results-*.xml
                 exitCode=0
                 for testfile in tests/*.test.js; do
-                  echo "🔹 Ejecutando $testfile..."
+                  echo "🧪 Ejecutando $testfile..."
                   npx mocha "$testfile" --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-$(basename $testfile .js).xml --timeout 15000 || exitCode=1
                 done
                 exit $exitCode
               ''',
               returnStatus: true
             )
-            if (testExitCode != 0) {
-              echo '⚠️ Algunas pruebas backend fallaron.'
+
+            if (exitCode != 0) {
+              echo '⚠️ Algunas pruebas del backend fallaron.'
               currentBuild.result = 'UNSTABLE'
             } else {
-              echo '✅ Todas las pruebas backend pasaron.'
+              echo '✅ Todas las pruebas del backend pasaron.'
             }
           }
         }
       }
       post {
         always {
-          echo '📄 Publicando resultados de pruebas backend...'
           junit 'api/test-results-*.xml'
         }
       }
     }
 
-    stage('Build Frontend') {
+    stage('Frontend: Install & Build') {
       steps {
         dir('frontend') {
-          echo '📦 Instalando y construyendo frontend...'
+          echo '📦 Instalando dependencias del frontend...'
           sh 'rm -rf node_modules package-lock.json build'
           sh 'npm install'
+
+          echo '⚙️ Construyendo frontend...'
           sh 'npm run build'
         }
       }
@@ -62,51 +66,59 @@ pipeline {
 
     stage('Deploy Frontend & Backend') {
       steps {
-        echo '🚀 Desplegando frontend y backend en servidor...'
         script {
-          // Sincronizar y reiniciar backend con PM2
+          echo '🚀 Desplegando frontend y backend...'
+
+          // Copiar backend (sin node_modules, sin tests)
           sh '''
-            sudo su - azureuser -c '
-              echo "🔄 Sincronizando backend..."
-              rsync -av --delete --exclude=node_modules --exclude=tests /var/lib/jenkins/workspace/${JOB_NAME}/api/ /home/azureuser/app-teatro-mora/api/
-
-              echo "📦 Instalando dependencias de producción (backend)..."
-              cd /home/azureuser/app-teatro-mora/api
-              npm install --omit=dev
-
-              echo "♻️ Reiniciando backend con PM2..."
-              pm2 reset api-teatro
-            '
+            echo "📁 Copiando backend a $DEPLOY_PATH/api..."
+            rm -rf $DEPLOY_PATH/api
+            mkdir -p $DEPLOY_PATH/api
+            cp -r api/* $DEPLOY_PATH/api
+            rm -rf $DEPLOY_PATH/api/tests $DEPLOY_PATH/api/node_modules
           '''
 
-          // Desplegar frontend (copiar `build/` a base)
+          // Instalar dependencias de producción en el backend
           sh '''
-            sudo su - azureuser -c '
-              echo "🌐 Copiando frontend build..."
-              rsync -av --delete /var/lib/jenkins/workspace/${JOB_NAME}/frontend/build/ /home/azureuser/app-teatro-mora/
-            '
+            echo "📦 Instalando dependencias de producción en backend..."
+            cd $DEPLOY_PATH/api
+            npm install --omit=dev
+          '''
+
+          // Reiniciar backend
+          sh '''
+            echo "♻️ Reiniciando backend con PM2..."
+            pm2 reset api-teatro || pm2 start index.js --name api-teatro
+          '''
+
+          // Copiar frontend build
+          sh '''
+            echo "🌐 Copiando frontend..."
+            rm -rf $DEPLOY_PATH/build
+            cp -r frontend/build $DEPLOY_PATH/
           '''
         }
       }
     }
 
-    stage('Run Selenium E2E Tests') {
+    stage('E2E Tests - Selenium') {
       steps {
         dir('src/tests/e2e-chromium') {
           echo '📦 Instalando dependencias E2E...'
           sh 'rm -rf node_modules package-lock.json'
           sh 'npm install selenium-webdriver mocha chai'
 
-          echo '🧪 Ejecutando pruebas E2E Selenium...'
+          echo '🧪 Ejecutando pruebas E2E Selenium Chromium...'
           script {
-            def e2eExitCode = sh(
+            def e2eCode = sh(
               script: '''
                 rm -f test-results-e2e.xml
                 npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-e2e.xml --timeout 30000 || exit 1
               ''',
               returnStatus: true
             )
-            if (e2eExitCode != 0) {
+
+            if (e2eCode != 0) {
               echo '⚠️ Algunas pruebas E2E fallaron.'
               currentBuild.result = 'UNSTABLE'
             } else {
@@ -117,7 +129,6 @@ pipeline {
       }
       post {
         always {
-          echo '📄 Publicando resultados E2E...'
           junit 'src/tests/e2e-chromium/test-results-e2e.xml'
         }
       }
@@ -129,13 +140,13 @@ pipeline {
       echo '✅ CI/CD completado exitosamente.'
     }
     unstable {
-      echo '⚠️ CI/CD completado con estado UNSTABLE (verifica los tests).'
+      echo '⚠️ CI/CD completado con estado UNSTABLE. Revisa los reportes.'
     }
     failure {
-      echo '❌ El pipeline falló completamente.'
+      echo '❌ Falló el pipeline. Revisa los errores.'
     }
     always {
-      echo '📦 Finalizando ejecución del pipeline.'
+      echo '📦 Pipeline finalizado.'
     }
   }
 }
