@@ -47,11 +47,7 @@ pipeline {
     }
 
     stage('Deploy Backend') {
-      when {
-        expression {
-          return env.BRANCH_NAME == 'develop'
-        }
-      }
+
       steps {
         echo '🚀 Desplegando backend en servidor...'
         dir('api') {
@@ -71,11 +67,7 @@ pipeline {
     }
 
     stage('Deploy Frontend') {
-      when {
-        expression {
-          return env.BRANCH_NAME == 'develop'
-        }
-      }
+      
       steps {
         echo '🌐 Desplegando frontend (React) en servidor...'
         dir('frontend') {
@@ -88,11 +80,7 @@ pipeline {
     }
 
     stage('Run Selenium E2E Tests') {
-      when {
-        expression {
-          return env.BRANCH_NAME == 'develop'
-        }
-      }
+      
       steps {
         dir('src/tests/e2e-chromium') {
           echo '🧪 Instalando dependencias para tests E2E Chromium...'
