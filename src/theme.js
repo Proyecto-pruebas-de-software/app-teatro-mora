@@ -3,11 +3,11 @@ import { createTheme } from '@mui/material/styles'
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#1a237e', // Deep blue for theater theme
-      light: '#534bae',
-      dark: '#000051',
-      contrastText: '#ffffff',
-    },
+  main: '#1b5e20',        // Deep green (base)
+  light: '#4c8c4a',       // Lighter green
+  dark: '#003300',        // Very dark green
+  contrastText: '#ffffff' // Blanco para buen contraste
+},
     secondary: {
       main: '#c2185b', // Pink for accents
       light: '#fa5788',
