@@ -18,7 +18,7 @@ pipeline {
 
           echo '📦 Instalando dependencias del backend...'
           sh 'npm install'
-          sh 'npm install --save-dev mocha chai mocha-junit-reporter'
+          sh 'npm install --save-dev mocha chai mocha-junit-reporter selenium-webdriver'
         }
       }
     }
@@ -27,7 +27,6 @@ pipeline {
       steps {
         dir('api') {
           echo '🧪 Ejecutando pruebas del backend...'
-          // Captura errores para no interrumpir el flujo
           script {
             def testExitCode = sh(
               script: '''
@@ -41,19 +40,18 @@ pipeline {
               ''',
               returnStatus: true
             )
-
             if (testExitCode != 0) {
-              echo '⚠️ Algunas pruebas fallaron.'
+              echo '⚠️ Algunas pruebas backend fallaron.'
               currentBuild.result = 'UNSTABLE'
             } else {
-              echo '✅ Todas las pruebas pasaron.'
+              echo '✅ Todas las pruebas backend pasaron.'
             }
           }
         }
       }
       post {
         always {
-          echo '📄 Publicando resultados de pruebas...'
+          echo '📄 Publicando resultados de pruebas backend...'
           junit 'api/test-results-*.xml'
         }
       }
@@ -113,6 +111,39 @@ pipeline {
           } else {
             echo "⏭️ Saltando deploy frontend (branch: ${env.BRANCH_NAME})"
           }
+        }
+      }
+    }
+
+    stage('Run Selenium E2E Tests') {
+      steps {
+        dir('e2e') {
+          echo '🧪 Instalando dependencias para tests E2E...'
+          sh 'rm -rf node_modules package-lock.json'
+          sh 'npm install selenium-webdriver mocha chai'
+
+          echo '🚀 Ejecutando pruebas E2E con Selenium...'
+          script {
+            def e2eExitCode = sh(
+              script: '''
+                rm -f test-results-e2e.xml
+                npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-e2e.xml --timeout 30000 || exit 1
+              ''',
+              returnStatus: true
+            )
+            if (e2eExitCode != 0) {
+              echo '⚠️ Algunas pruebas E2E fallaron.'
+              currentBuild.result = 'UNSTABLE'
+            } else {
+              echo '✅ Todas las pruebas E2E pasaron.'
+            }
+          }
+        }
+      }
+      post {
+        always {
+          echo '📄 Publicando resultados de pruebas E2E...'
+          junit 'e2e/test-results-e2e.xml'
         }
       }
     }
