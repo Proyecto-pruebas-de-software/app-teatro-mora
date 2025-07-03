@@ -74,7 +74,9 @@ pipeline {
 
     stage('Deploy Backend') {
       when {
-        branch 'develop'
+        expression {
+          return sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim() == 'develop'
+        }
       }
       steps {
         echo '🚀 Desplegando backend en servidor...'
@@ -96,7 +98,9 @@ pipeline {
 
     stage('Deploy Frontend') {
       when {
-        branch 'develop'
+        expression {
+          return sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim() == 'develop'
+        }
       }
       steps {
         echo '🌐 Desplegando frontend (React) en servidor...'
@@ -111,7 +115,9 @@ pipeline {
 
     stage('Run Selenium E2E Tests') {
       when {
-        branch 'develop'
+        expression {
+          return sh(script: "git rev-parse --abbrev-ref HEAD", returnStdout: true).trim() == 'develop'
+        }
       }
       steps {
         dir('src/tests/e2e-chromium') {
