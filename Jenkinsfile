@@ -73,56 +73,53 @@ pipeline {
     }
 
     stage('Deploy Backend') {
+      when {
+        branch 'main'
+      }
       steps {
-        script {
-          if (env.BRANCH_NAME == 'main') {
-            echo '🚀 Desplegando backend en servidor...'
-            dir('api') {
-              sh '''
-                echo "📁 Sincronizando backend a /home/azureuser/app-teatro-mora/api..."
-                rsync -av --delete --exclude=node_modules --exclude=tests ./ /home/azureuser/app-teatro-mora/api/
+        echo '🚀 Desplegando backend en servidor...'
+        dir('api') {
+          sh '''
+            echo "📁 Sincronizando backend a /home/azureuser/app-teatro-mora/api..."
+            rsync -av --delete --exclude=node_modules --exclude=tests ./ /home/azureuser/app-teatro-mora/api/
 
-                echo "📦 Instalando dependencias de producción..."
-                cd /home/azureuser/app-teatro-mora/api
-                npm install --omit=dev
+            echo "📦 Instalando dependencias de producción..."
+            cd /home/azureuser/app-teatro-mora/api
+            npm install --omit=dev
 
-                echo "♻️ Reiniciando backend con PM2..."
-                pm2 reset api-teatro
-              '''
-            }
-          } else {
-            echo "⏭️ Saltando deploy backend (branch: ${env.BRANCH_NAME})"
-          }
+            echo "♻️ Reiniciando backend con PM2..."
+            pm2 reset api-teatro
+          '''
         }
       }
     }
 
     stage('Deploy Frontend') {
+      when {
+        branch 'main'
+      }
       steps {
-        script {
-          if (env.BRANCH_NAME == 'main') {
-            echo '🌐 Desplegando frontend (React) en servidor...'
-            dir('frontend') {
-              sh '''
-                echo "📁 Copiando build de frontend a /home/azureuser/app-teatro-mora..."
-                rsync -av --delete build/ /home/azureuser/app-teatro-mora/
-              '''
-            }
-          } else {
-            echo "⏭️ Saltando deploy frontend (branch: ${env.BRANCH_NAME})"
-          }
+        echo '🌐 Desplegando frontend (React) en servidor...'
+        dir('frontend') {
+          sh '''
+            echo "📁 Copiando build de frontend a /home/azureuser/app-teatro-mora..."
+            rsync -av --delete build/ /home/azureuser/app-teatro-mora/
+          '''
         }
       }
     }
 
     stage('Run Selenium E2E Tests') {
+      when {
+        branch 'main'
+      }
       steps {
-        dir('e2e') {
-          echo '🧪 Instalando dependencias para tests E2E...'
+        dir('src/tests/e2e-chromium') {
+          echo '🧪 Instalando dependencias para tests E2E Chromium...'
           sh 'rm -rf node_modules package-lock.json'
           sh 'npm install selenium-webdriver mocha chai'
 
-          echo '🚀 Ejecutando pruebas E2E con Selenium...'
+          echo '🚀 Ejecutando pruebas E2E con Selenium Chromium...'
           script {
             def e2eExitCode = sh(
               script: '''
@@ -132,18 +129,18 @@ pipeline {
               returnStatus: true
             )
             if (e2eExitCode != 0) {
-              echo '⚠️ Algunas pruebas E2E fallaron.'
+              echo '⚠️ Algunas pruebas E2E Chromium fallaron.'
               currentBuild.result = 'UNSTABLE'
             } else {
-              echo '✅ Todas las pruebas E2E pasaron.'
+              echo '✅ Todas las pruebas E2E Chromium pasaron.'
             }
           }
         }
       }
       post {
         always {
-          echo '📄 Publicando resultados de pruebas E2E...'
-          junit 'e2e/test-results-e2e.xml'
+          echo '📄 Publicando resultados de pruebas E2E Chromium...'
+          junit 'src/tests/e2e-chromium/test-results-e2e.xml'
         }
       }
     }
