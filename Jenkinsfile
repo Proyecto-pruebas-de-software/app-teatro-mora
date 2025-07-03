@@ -74,7 +74,7 @@ pipeline {
 
     stage('Deploy Backend') {
       when {
-        branch 'main'
+        branch 'develop'
       }
       steps {
         echo '🚀 Desplegando backend en servidor...'
@@ -96,7 +96,7 @@ pipeline {
 
     stage('Deploy Frontend') {
       when {
-        branch 'main'
+        branch 'develop'
       }
       steps {
         echo '🌐 Desplegando frontend (React) en servidor...'
@@ -111,7 +111,7 @@ pipeline {
 
     stage('Run Selenium E2E Tests') {
       when {
-        branch 'main'
+        branch 'develop'
       }
       steps {
         dir('src/tests/e2e-chromium') {
