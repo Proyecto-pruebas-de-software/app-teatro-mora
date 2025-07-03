@@ -10,84 +10,94 @@ pipeline {
   }
 
   stages {
-    stage('Checkout') {
-      steps {
-        echo '📥 Haciendo checkout del repositorio...'
-        checkout scm
-      }
-    }
-
-    stage('Install Backend Dependencies') {
+    stage('Test Backend') {
       steps {
         dir('api') {
-          echo '🧹 Limpiando dependencias previas del backend...'
-          sh 'rm -rf node_modules package-lock.json'
-
           echo '📦 Instalando dependencias del backend...'
+          sh 'rm -rf node_modules package-lock.json'
           sh 'npm install'
-          sh 'npm install --save-dev mocha chai mocha-junit-reporter selenium-webdriver'
+          sh 'npm install --save-dev mocha chai mocha-junit-reporter'
+
+          echo '🧪 Ejecutando pruebas del backend...'
+          script {
+            def testExitCode = sh(
+              script: '''
+                rm -f test-results-*.xml
+                exitCode=0
+                for testfile in tests/*.test.js; do
+                  echo "🔹 Ejecutando $testfile..."
+                  npx mocha "$testfile" --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-$(basename $testfile .js).xml --timeout 15000 || exitCode=1
+                done
+                exit $exitCode
+              ''',
+              returnStatus: true
+            )
+            if (testExitCode != 0) {
+              echo '⚠️ Algunas pruebas backend fallaron.'
+              currentBuild.result = 'UNSTABLE'
+            } else {
+              echo '✅ Todas las pruebas backend pasaron.'
+            }
+          }
+        }
+      }
+      post {
+        always {
+          echo '📄 Publicando resultados de pruebas backend...'
+          junit 'api/test-results-*.xml'
         }
       }
     }
 
-
-    stage('Install & Build Frontend') {
+    stage('Build Frontend') {
       steps {
         dir('frontend') {
-          echo '🧹 Limpiando frontend...'
+          echo '📦 Instalando y construyendo frontend...'
           sh 'rm -rf node_modules package-lock.json build'
-
-          echo '📦 Instalando dependencias del frontend...'
           sh 'npm install'
-
-          echo '⚙️ Construyendo frontend...'
           sh 'npm run build'
         }
       }
     }
 
-    stage('Deploy Backend') {
-
+    stage('Deploy Frontend & Backend') {
       steps {
-        echo '🚀 Desplegando backend en servidor...'
-        dir('api') {
+        echo '🚀 Desplegando frontend y backend en servidor...'
+        script {
+          // Sincronizar y reiniciar backend con PM2
           sh '''
-            echo "📁 Sincronizando backend a /home/azureuser/app-teatro-mora/api..."
-            rsync -av --delete --exclude=node_modules --exclude=tests ./ /home/azureuser/app-teatro-mora/api/
+            sudo su - azureuser -c '
+              echo "🔄 Sincronizando backend..."
+              rsync -av --delete --exclude=node_modules --exclude=tests /var/lib/jenkins/workspace/${JOB_NAME}/api/ /home/azureuser/app-teatro-mora/api/
 
-            echo "📦 Instalando dependencias de producción..."
-            cd /home/azureuser/app-teatro-mora/api
-            npm install --omit=dev
+              echo "📦 Instalando dependencias de producción (backend)..."
+              cd /home/azureuser/app-teatro-mora/api
+              npm install --omit=dev
 
-            echo "♻️ Reiniciando backend con PM2..."
-            pm2 reset api-teatro
+              echo "♻️ Reiniciando backend con PM2..."
+              pm2 reset api-teatro
+            '
           '''
-        }
-      }
-    }
 
-    stage('Deploy Frontend') {
-      
-      steps {
-        echo '🌐 Desplegando frontend (React) en servidor...'
-        dir('frontend') {
+          // Desplegar frontend (copiar `build/` a base)
           sh '''
-            echo "📁 Copiando build de frontend a /home/azureuser/app-teatro-mora..."
-            rsync -av --delete build/ /home/azureuser/app-teatro-mora/
+            sudo su - azureuser -c '
+              echo "🌐 Copiando frontend build..."
+              rsync -av --delete /var/lib/jenkins/workspace/${JOB_NAME}/frontend/build/ /home/azureuser/app-teatro-mora/
+            '
           '''
         }
       }
     }
 
     stage('Run Selenium E2E Tests') {
-      
       steps {
         dir('src/tests/e2e-chromium') {
-          echo '🧪 Instalando dependencias para tests E2E Chromium...'
+          echo '📦 Instalando dependencias E2E...'
           sh 'rm -rf node_modules package-lock.json'
           sh 'npm install selenium-webdriver mocha chai'
 
-          echo '🚀 Ejecutando pruebas E2E con Selenium Chromium...'
+          echo '🧪 Ejecutando pruebas E2E Selenium...'
           script {
             def e2eExitCode = sh(
               script: '''
@@ -97,17 +107,17 @@ pipeline {
               returnStatus: true
             )
             if (e2eExitCode != 0) {
-              echo '⚠️ Algunas pruebas E2E Chromium fallaron.'
+              echo '⚠️ Algunas pruebas E2E fallaron.'
               currentBuild.result = 'UNSTABLE'
             } else {
-              echo '✅ Todas las pruebas E2E Chromium pasaron.'
+              echo '✅ Todas las pruebas E2E pasaron.'
             }
           }
         }
       }
       post {
         always {
-          echo '📄 Publicando resultados de pruebas E2E Chromium...'
+          echo '📄 Publicando resultados E2E...'
           junit 'src/tests/e2e-chromium/test-results-e2e.xml'
         }
       }
