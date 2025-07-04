@@ -12,7 +12,37 @@ pipeline {
   }
 
   stages {
+    stage('Install Backend Dependencies') {
+      steps {
+        dir('api') {
+          echo 'Borrando node_modules y package-lock.json...'
+          sh 'rm -rf node_modules package-lock.json'
+          echo 'Instalando dependencias backend...'
+          sh 'npm install'
+          sh 'npm install --save-dev mocha chai mocha-junit-reporter'
+        }
+      }
+    }
 
+    stage('Run Backend Tests') {
+      steps {
+        dir('api') {
+          echo 'Ejecutando pruebas del backend...'
+          sh '''
+            rm -f test-results-*.xml
+            for testfile in tests/*.test.js; do
+              echo "Ejecutando $testfile..."
+              npx mocha "$testfile" --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-$(basename $testfile .js).xml --timeout 15000 || true
+            done
+          '''
+        }
+      }
+      post {
+        always {
+          junit 'api/test-results-*.xml'
+        }
+      }
+    }
     stage('Deploy Backend') {
       steps {
         echo '🚀 Desplegando backend...'
@@ -67,23 +97,19 @@ pipeline {
     }
 
     stage('Run E2E Tests') {
-  steps {
-    echo '🧪 Ejecutando pruebas E2E con Chromium como azureuser...'
+      steps {
+        echo '🧪 Ejecutando pruebas E2E con Chromium...'
+        sh 'sleep 5'  // Espera para asegurarse que el backend y frontend estén arriba
 
-    // Espera para asegurar que el backend y frontend estén arriba
-    sh 'sleep 5'
+        sh '''
+          echo "Instalando dependencias E2E si es necesario..."
+          npm install
 
-    // Ejecuta las pruebas con sudo -u azureuser
-    sh '''
-      echo "Ejecutando pruebas E2E como azureuser..."
-      sudo -u azureuser bash -c '
-        cd /var/lib/jenkins/workspace/teatro-mora
-        npm install
-        npm run test:e2e
-      '
-    '''
-  }
-}
+          echo "Ejecutando pruebas E2E (npm run test:e2e)..."
+          sudo -u azureuser npm run test:e2e
+        '''
+      }
+    }
   }
 
   post {
