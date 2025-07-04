@@ -52,8 +52,7 @@ pipeline {
           def e2eCode = sh(
             script: '''
               cd $DEPLOY_PATH
-              npm run test:e2e-chromium
-            ''',
+              npx wait-on http://52.224.217.93 && npm run test:e2e            ''',
             returnStatus: true
           )
 
