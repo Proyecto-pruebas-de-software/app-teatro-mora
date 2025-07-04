@@ -15,9 +15,12 @@ pipeline {
     stage('Pruebas Backend') {
       steps {
         dir('api') {
-          echo '📦 Instalando dependencias backend...'
+          echo '📦 Limpiando e instalando dependencias backend...'
           sh 'rm -rf node_modules package-lock.json'
           sh 'npm install'
+
+          echo '📦 Instalando mocha-junit-reporter para reporte...'
+          sh 'npm install --no-save --no-package-lock mocha-junit-reporter'
 
           echo '🧪 Ejecutando pruebas backend...'
           script {
@@ -46,14 +49,18 @@ pipeline {
 
         // Backend
         dir("$DEPLOY_PATH/api") {
+          echo '📦 Limpiando e instalando dependencias producción backend...'
           sh 'rm -rf node_modules package-lock.json'
           sh 'npm install --omit=dev'
         }
 
         // Frontend
         dir("$DEPLOY_PATH") {
+          echo '📦 Limpiando e instalando dependencias frontend...'
           sh 'rm -rf node_modules package-lock.json build dist'
           sh 'npm install'
+
+          echo '⚙️ Construyendo frontend...'
           sh 'npm run build'
         }
       }
@@ -74,15 +81,18 @@ pipeline {
     stage('Ejecutar pruebas E2E Selenium Chromium') {
       steps {
         dir("$DEPLOY_PATH/src/tests/e2e-chromium") {
-          echo '📦 Instalando dependencias para pruebas E2E...'
+          echo '📦 Limpiando e instalando dependencias para pruebas E2E...'
           sh 'rm -rf node_modules package-lock.json'
-          sh 'npm install selenium-webdriver mocha chai'
+          sh 'npm install'
+
+          echo '📦 Instalando selenium-webdriver, mocha y chai...'
+          sh 'npm install --no-save --no-package-lock selenium-webdriver mocha chai mocha-junit-reporter'
 
           echo '🧪 Ejecutando pruebas E2E Selenium...'
           script {
             def e2eCode = sh(
               script: '''
-                npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-e2e.xml --timeout 30000 || exit 1
+                npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-e2e.xml --timeout 30000
               ''',
               returnStatus: true
             )
