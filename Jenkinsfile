@@ -51,8 +51,8 @@ pipeline {
         script {
           def e2eCode = sh(
             script: '''
-              cd $DEPLOY_PATH/src/tests/e2e-chromium
-              npx mocha --timeout 30000 || exit 1
+              cd $DEPLOY_PATH
+              npm run test:e2e-chromium
             ''',
             returnStatus: true
           )
