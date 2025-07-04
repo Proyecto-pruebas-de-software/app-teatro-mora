@@ -26,8 +26,15 @@ pipeline {
             cd /home/azureuser/app-teatro-mora/api
             npm install --omit=dev
 
-            echo "Reiniciando backend con PM2..."
-            pm2 reset api-teatro
+            
+            echo "Reiniciando backend con PM2 como azureuser..."
+            sudo -u azureuser pm2 start index.js \
+              --name api-teatro \
+              --cwd /home/azureuser/app-teatro-mora/api \
+              --env production \
+              --update-env
+            
+
           '''
         }
       }
