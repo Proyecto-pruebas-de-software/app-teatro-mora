@@ -14,7 +14,6 @@ pipeline {
   stages {
 
     stage('Deploy Backend') {
-      
       steps {
         echo '🚀 Desplegando backend...'
         dir('api') {
@@ -26,51 +25,52 @@ pipeline {
             cd /home/azureuser/app-teatro-mora/api
             npm install --omit=dev
 
-            
             echo "Eliminando proceso anterior de PM2..."
             sudo -u azureuser pm2 delete api-teatro || true
-          
+
             echo "Levantando backend con PM2 desde cero..."
             sudo -u azureuser pm2 start index.js \
               --name api-teatro \
               --cwd /home/azureuser/app-teatro-mora/api \
               --env production \
               --update-env
-            
-
           '''
         }
       }
     }
 
     stage('Build & Deploy Frontend') {
-      
       steps {
-        echo '🌐 Construyendo y desplegando frontend (React)...'
+        echo '🌐 Construyendo y desplegando frontend (Vite)...'
         dir('frontend') {
           sh '''
             echo "Limpiando y preparando frontend..."
-            rm -rf node_modules package-lock.json build
+            rm -rf node_modules package-lock.json dist
             npm install
 
             echo "Construyendo frontend..."
             npm run build
-
-            echo "Copiando build a /home/azureuser/app-teatro-mora (raíz para NGINX)..."
-            rsync -av --delete dist/ /home/azureuser/app-teatro-mora/
           '''
         }
+
+        // Copiar dist desde la raíz del proyecto
+        sh '''
+          echo "Copiando build desde raíz del proyecto (dist/) a /home/azureuser/app-teatro-mora..."
+          if [ ! -d dist ]; then
+            echo "❌ No se encontró el directorio 'dist/' en la raíz del proyecto."
+            exit 1
+          fi
+
+          rsync -av --delete dist/ /home/azureuser/app-teatro-mora/
+        '''
       }
     }
 
     stage('Run E2E Tests') {
-      
       steps {
         echo '🧪 Ejecutando pruebas E2E con Chromium...'
-        // Esperar a que los servicios estén completamente levantados
-        sh 'sleep 5'
+        sh 'sleep 5'  // Espera para asegurarse que el backend y frontend estén arriba
 
-        // Ejecutar pruebas desde la raíz del proyecto
         sh '''
           echo "Instalando dependencias E2E si es necesario..."
           npm install
