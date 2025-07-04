@@ -94,20 +94,21 @@ pipeline {
       }
     }
 
-    stage('Run E2E Tests') {
-      steps {
-        echo '🧪 Ejecutando pruebas E2E con Chromium...'
-        sh 'sleep 5'  // Espera para asegurarse que el backend y frontend estén arriba
+stage('Run E2E Tests') {
+  steps {
+    echo '🧪 Ejecutando pruebas E2E como azureuser con entorno completo...'
 
-        sh '''
-          echo "Instalando dependencias E2E si es necesario..."
-          npm install
+    sh '''
+      sleep 5
+      sudo -u azureuser bash -lc '
+        cd /var/lib/jenkins/workspace/teatro-mora
+        npm install
+        npm run test:e2e
+      '
+    '''
+  }
+}
 
-          echo "Ejecutando pruebas E2E (npm run test:e2e)..."
-          sudo -u azureuser npm run test:e2e
-        '''
-      }
-    }
   }
 
   post {
