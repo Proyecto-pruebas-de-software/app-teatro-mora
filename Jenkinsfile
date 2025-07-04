@@ -53,7 +53,7 @@ pipeline {
             script: '''
               cd $DEPLOY_PATH/src/tests/e2e-chromium
               rm -f test-results-e2e.xml
-              npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-e2e.xml --timeout 30000 || exit 1
+              npx mocha --timeout 30000 || exit 1
             ''',
             returnStatus: true
           )
