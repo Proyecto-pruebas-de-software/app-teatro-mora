@@ -23,6 +23,11 @@
     - [Autenticación](#autenticación)
   - [Testing](#testing)
   - [Despliegue (Futuro)](#despliegue-futuro)
+  - [Despliegue e Integración Continua con Jenkins](#despliegue-e-integración-continua-con-jenkins)
+    - [Validaciones y mejoras del pipeline](#validaciones-y-mejoras-del-pipeline)
+    - [Dependencias involucradas](#dependencias-involucradas)
+    - [Problemas comunes y soluciones](#problemas-comunes-y-soluciones)
+  - [Enlaces del Proyecto y Equipo](#enlaces-del-proyecto-y-equipo)
   - [Contribución](#contribución)
   - [📄 Licencia](#-licencia)
 
@@ -301,6 +306,23 @@ Jenkins interactúa con:
 - **Permisos de Jenkins:** se ajustaron para acceso a carpetas necesarias
 - **Tests de frontend falsos positivos:** se forzó la propagación de errores
 - **Compilación sin logs útiles:** se mejoró el log y el manejo de errores
+
+
+## Enlaces del Proyecto y Equipo
+
+- [Video de Entrega 3](https://youtu.be/1xeO6v8b1Os)
+
+- [Wiki del Proyecto](https://github.com/Proyecto-pruebas-de-software/app-teatro-mora/wiki)
+
+- Integrantes del Equipo:
+
+    - Claudio Varela
+
+    - Joaquin Lopez
+
+    - Sofía Bastías 
+
+    - Álvaro Sánchez 
 
 ##  Contribución
 
