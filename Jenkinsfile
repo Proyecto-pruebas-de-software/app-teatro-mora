@@ -27,13 +27,15 @@ pipeline {
             npm install --omit=dev
 
             
-            echo "Reiniciando backend con PM2 como azureuser..."
+            echo "Eliminando proceso anterior de PM2..."
+            sudo -u azureuser pm2 delete api-teatro || true
+          
+            echo "Levantando backend con PM2 desde cero..."
             sudo -u azureuser pm2 start index.js \
-            --name api-teatro \
-            --cwd /home/azureuser/app-teatro-mora/api \
-            --env production \
-            --update-env \
-            -f
+              --name api-teatro \
+              --cwd /home/azureuser/app-teatro-mora/api \
+              --env production \
+              --update-env
             
 
           '''
@@ -55,7 +57,7 @@ pipeline {
             npm run build
 
             echo "Copiando build a /home/azureuser/app-teatro-mora (raíz para NGINX)..."
-            rsync -av --delete build/ /home/azureuser/app-teatro-mora/
+            rsync -av --delete dist/ /home/azureuser/app-teatro-mora/
           '''
         }
       }
