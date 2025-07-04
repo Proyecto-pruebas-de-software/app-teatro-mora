@@ -29,10 +29,11 @@ pipeline {
             
             echo "Reiniciando backend con PM2 como azureuser..."
             sudo -u azureuser pm2 start index.js \
-              --name api-teatro \
-              --cwd /home/azureuser/app-teatro-mora/api \
-              --env production \
-              --update-env
+            --name api-teatro \
+            --cwd /home/azureuser/app-teatro-mora/api \
+            --env production \
+            --update-env \
+            -f
             
 
           '''
