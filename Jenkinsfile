@@ -12,68 +12,63 @@ pipeline {
 
   stages {
 
-    
 
     stage('Frontend: Install & Build') {
       steps {
-        dir("${DEPLOY_PATH}/src") {
-          echo '📦 Instalando dependencias del frontend...'
-          sh 'rm -rf node_modules package-lock.json build'
-          sh 'npm install'
+        echo '📦 Instalando dependencias del frontend...'
+        sh 'rm -rf $DEPLOY_PATH/src/node_modules $DEPLOY_PATH/src/package-lock.json'
+        sh 'cd $DEPLOY_PATH/src && npm install'
 
-          echo '⚙️ Construyendo frontend...'
-          sh 'npm run build'
-        }
+        echo '⚙️ Construyendo frontend...'
+        sh 'cd $DEPLOY_PATH/src && npm run build'
       }
     }
 
-    stage('Deploy & Restart Backend') {
+    stage('Deploy Backend') {
       steps {
-        dir("${DEPLOY_PATH}/api") {
-          echo '📦 Instalando dependencias de producción en backend...'
-          sh 'npm install --omit=dev'
+        echo '🚀 Desplegando backend...'
 
-          echo '♻️ Reiniciando backend con PM2...'
-          sh 'pm2 reset api-teatro || pm2 start index.js --name api-teatro'
-        }
+        sh '''
+          echo "📁 Limpiando backend anterior..."
+          rm -rf $DEPLOY_PATH/api/node_modules $DEPLOY_PATH/api/tests
 
-        dir("${DEPLOY_PATH}") {
-          echo '🌐 Moviendo build de frontend a raíz del proyecto...'
-          sh 'rm -rf build'
-          sh 'mv src/build ./'
-        }
+          echo "📦 Instalando dependencias de producción (backend)..."
+          cd $DEPLOY_PATH/api && npm install --omit=dev
+
+          echo "♻️ Reiniciando backend con PM2..."
+          pm2 reset api-teatro || pm2 start $DEPLOY_PATH/api/index.js --name api-teatro
+        '''
       }
     }
 
     stage('E2E Tests - Selenium') {
       steps {
-        dir("${DEPLOY_PATH}/src/tests/e2e-chromium") {
-          echo '📦 Instalando dependencias E2E...'
-          sh 'rm -rf node_modules package-lock.json'
-          sh 'npm install selenium-webdriver mocha chai'
+        echo '📦 Instalando dependencias E2E...'
+        sh 'rm -rf $DEPLOY_PATH/src/tests/e2e-chromium/node_modules $DEPLOY_PATH/src/tests/e2e-chromium/package-lock.json'
+        sh 'cd $DEPLOY_PATH/src/tests/e2e-chromium && npm install selenium-webdriver mocha chai'
 
-          echo '🧪 Ejecutando pruebas E2E Selenium Chromium...'
-          script {
-            def e2eCode = sh(
-              script: '''
-                rm -f test-results-e2e.xml
-                npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-e2e.xml --timeout 30000 || exit 1
-              ''',
-              returnStatus: true
-            )
+        echo '🧪 Ejecutando pruebas E2E Selenium Chromium...'
+        script {
+          def e2eCode = sh(
+            script: '''
+              cd $DEPLOY_PATH/src/tests/e2e-chromium
+              rm -f test-results-e2e.xml
+              npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-e2e.xml --timeout 30000 || exit 1
+            ''',
+            returnStatus: true
+          )
 
-            if (e2eCode != 0) {
-              echo '⚠️ Algunas pruebas E2E fallaron.'
-              currentBuild.result = 'UNSTABLE'
-            } else {
-              echo '✅ Todas las pruebas E2E pasaron.'
-            }
+          if (e2eCode != 0) {
+            echo '⚠️ Algunas pruebas E2E fallaron.'
+            currentBuild.result = 'UNSTABLE'
+          } else {
+            echo '✅ Todas las pruebas E2E pasaron.'
           }
         }
       }
       post {
         always {
-          junit "${DEPLOY_PATH}/src/tests/e2e-chromium/test-results-e2e.xml"
+          junit '$DEPLOY_PATH/src/tests/e2e-chromium/test-results-e2e.xml'
         }
       }
     }
