@@ -96,18 +96,15 @@ pipeline {
 
 stage('Run E2E Tests') {
   steps {
-    echo '🧪 Ejecutando pruebas E2E como azureuser con entorno completo...'
-
+    echo '🧪 Ejecutando pruebas E2E...'
     sh '''
-      sleep 5
-      sudo -u azureuser bash -lc '
-        cd /var/lib/jenkins/workspace/teatro-mora
-        npm install
-        npm run test:e2e
-      '
+      sleep 10
+      npm install
+      npm run test:e2e
     '''
   }
 }
+
 
   }
 
