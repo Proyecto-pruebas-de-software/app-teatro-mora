@@ -3,9 +3,7 @@ pipeline {
   environment {
     NODE_ENV = 'development'
   }
-  options {
-    skipStagesAfterUnstable()
-  }
+  
 
   tools {
     nodejs 'node24'
