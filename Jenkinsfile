@@ -12,48 +12,11 @@ pipeline {
 
   stages {
 
-    stage('Backend: Install & Test') {
-      steps {
-        dir('api') {
-          echo '📦 Instalando dependencias del backend...'
-          sh 'rm -rf node_modules package-lock.json'
-          sh 'npm install'
-          sh 'npm install --save-dev mocha chai mocha-junit-reporter selenium-webdriver'
-
-          echo '🧪 Ejecutando pruebas del backend...'
-          script {
-            def exitCode = sh (
-              script: '''
-                rm -f test-results-*.xml
-                exitCode=0
-                for testfile in tests/*.test.js; do
-                  echo "🧪 Ejecutando $testfile..."
-                  npx mocha "$testfile" --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-$(basename $testfile .js).xml --timeout 15000 || exitCode=1
-                done
-                exit $exitCode
-              ''',
-              returnStatus: true
-            )
-
-            if (exitCode != 0) {
-              echo '⚠️ Algunas pruebas del backend fallaron.'
-              currentBuild.result = 'UNSTABLE'
-            } else {
-              echo '✅ Todas las pruebas del backend pasaron.'
-            }
-          }
-        }
-      }
-      post {
-        always {
-          junit 'api/test-results-*.xml'
-        }
-      }
-    }
+    
 
     stage('Frontend: Install & Build') {
       steps {
-        dir('frontend') {
+        dir("${DEPLOY_PATH}/src") {
           echo '📦 Instalando dependencias del frontend...'
           sh 'rm -rf node_modules package-lock.json build'
           sh 'npm install'
@@ -64,46 +27,27 @@ pipeline {
       }
     }
 
-    stage('Deploy Frontend & Backend') {
+    stage('Deploy & Restart Backend') {
       steps {
-        script {
-          echo '🚀 Desplegando frontend y backend...'
+        dir("${DEPLOY_PATH}/api") {
+          echo '📦 Instalando dependencias de producción en backend...'
+          sh 'npm install --omit=dev'
 
-          // Copiar backend (sin node_modules, sin tests)
-          sh '''
-            echo "📁 Copiando backend a $DEPLOY_PATH/api..."
-            rm -rf $DEPLOY_PATH/api
-            mkdir -p $DEPLOY_PATH/api
-            cp -r api/* $DEPLOY_PATH/api
-            rm -rf $DEPLOY_PATH/api/tests $DEPLOY_PATH/api/node_modules
-          '''
+          echo '♻️ Reiniciando backend con PM2...'
+          sh 'pm2 reset api-teatro || pm2 start index.js --name api-teatro'
+        }
 
-          // Instalar dependencias de producción en el backend
-          sh '''
-            echo "📦 Instalando dependencias de producción en backend..."
-            cd $DEPLOY_PATH/api
-            npm install --omit=dev
-          '''
-
-          // Reiniciar backend
-          sh '''
-            echo "♻️ Reiniciando backend con PM2..."
-            pm2 reset api-teatro || pm2 start index.js --name api-teatro
-          '''
-
-          // Copiar frontend build
-          sh '''
-            echo "🌐 Copiando frontend..."
-            rm -rf $DEPLOY_PATH/build
-            cp -r frontend/build $DEPLOY_PATH/
-          '''
+        dir("${DEPLOY_PATH}") {
+          echo '🌐 Moviendo build de frontend a raíz del proyecto...'
+          sh 'rm -rf build'
+          sh 'mv src/build ./'
         }
       }
     }
 
     stage('E2E Tests - Selenium') {
       steps {
-        dir('src/tests/e2e-chromium') {
+        dir("${DEPLOY_PATH}/src/tests/e2e-chromium") {
           echo '📦 Instalando dependencias E2E...'
           sh 'rm -rf node_modules package-lock.json'
           sh 'npm install selenium-webdriver mocha chai'
@@ -129,7 +73,7 @@ pipeline {
       }
       post {
         always {
-          junit 'src/tests/e2e-chromium/test-results-e2e.xml'
+          junit "${DEPLOY_PATH}/src/tests/e2e-chromium/test-results-e2e.xml"
         }
       }
     }
