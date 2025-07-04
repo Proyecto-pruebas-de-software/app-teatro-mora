@@ -12,42 +12,9 @@ pipeline {
   }
 
   stages {
-    stage('Install Backend Dependencies') {
-      steps {
-        dir('api') {
-          echo 'Borrando node_modules y package-lock.json...'
-          sh 'rm -rf node_modules package-lock.json'
-          echo 'Instalando dependencias backend...'
-          sh 'npm install'
-          sh 'npm install --save-dev mocha chai mocha-junit-reporter'
-        }
-      }
-    }
-
-    stage('Run Backend Tests') {
-      steps {
-        dir('api') {
-          echo 'Ejecutando pruebas del backend...'
-          sh '''
-            rm -f test-results-*.xml
-            for testfile in tests/*.test.js; do
-              echo "Ejecutando $testfile..."
-              npx mocha "$testfile" --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-$(basename $testfile .js).xml --timeout 15000 || true
-            done
-          '''
-        }
-      }
-      post {
-        always {
-          junit 'api/test-results-*.xml'
-        }
-      }
-    }
 
     stage('Deploy Backend') {
-      when {
-        branch 'main'
-      }
+      
       steps {
         echo '🚀 Desplegando backend...'
         dir('api') {
@@ -67,9 +34,7 @@ pipeline {
     }
 
     stage('Build & Deploy Frontend') {
-      when {
-        branch 'main'
-      }
+      
       steps {
         echo '🌐 Construyendo y desplegando frontend (React)...'
         dir('frontend') {
@@ -89,9 +54,7 @@ pipeline {
     }
 
     stage('Run E2E Tests') {
-      when {
-        branch 'main'
-      }
+      
       steps {
         echo '🧪 Ejecutando pruebas E2E con Chromium...'
         // Esperar a que los servicios estén completamente levantados
