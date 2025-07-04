@@ -12,61 +12,93 @@ pipeline {
 
   stages {
 
-
-    stage('Frontend: Install & Build') {
+    stage('Pruebas Backend') {
       steps {
-        echo '📦 Instalando dependencias del frontend...'
-        sh 'rm -rf $DEPLOY_PATH/src/node_modules $DEPLOY_PATH/src/package-lock.json'
-        sh 'cd $DEPLOY_PATH/src && npm install'
+        dir('api') {
+          echo '📦 Instalando dependencias backend...'
+          sh 'rm -rf node_modules package-lock.json'
+          sh 'npm install'
 
-        echo '⚙️ Construyendo frontend...'
-        sh 'cd $DEPLOY_PATH/src && npm run build'
-      }
-    }
-
-    stage('Deploy Backend') {
-      steps {
-        echo '🚀 Desplegando backend...'
-
-        sh '''
-          echo "📁 Limpiando backend anterior..."
-          rm -rf $DEPLOY_PATH/api/node_modules $DEPLOY_PATH/api/tests
-
-          echo "📦 Instalando dependencias de producción (backend)..."
-          cd $DEPLOY_PATH/api && npm install --omit=dev
-
-          echo "♻️ Reiniciando backend con PM2..."
-          pm2 reset api-teatro || pm2 start $DEPLOY_PATH/api/index.js --name api-teatro
-        '''
-      }
-    }
-
-    stage('E2E Tests - Selenium') {
-      steps {
-        echo '📦 Instalando dependencias E2E...'
-        sh 'rm -rf $DEPLOY_PATH/src/tests/e2e-chromium/node_modules $DEPLOY_PATH/src/tests/e2e-chromium/package-lock.json'
-        sh 'cd $DEPLOY_PATH/src/tests/e2e-chromium && npm install selenium-webdriver mocha chai'
-
-        echo '🧪 Ejecutando pruebas E2E Selenium Chromium...'
-        script {
-          def e2eCode = sh(
-            script: '''
-              cd $DEPLOY_PATH
-              npx wait-on http://52.224.217.93 && npm run test:e2e            ''',
-            returnStatus: true
-          )
-
-          if (e2eCode != 0) {
-            echo '⚠️ Algunas pruebas E2E fallaron.'
-            currentBuild.result = 'UNSTABLE'
-          } else {
-            echo '✅ Todas las pruebas E2E pasaron.'
+          echo '🧪 Ejecutando pruebas backend...'
+          script {
+            def code = sh(
+              script: '''
+                npx mocha tests/**/*.test.js --timeout 15000 --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-backend.xml
+              ''',
+              returnStatus: true
+            )
+            if (code != 0) {
+              error "❌ Fallaron pruebas backend"
+            }
           }
         }
       }
       post {
         always {
-          junit '$DEPLOY_PATH/src/tests/e2e-chromium/test-results-e2e.xml'
+          junit 'api/test-results-backend.xml'
+        }
+      }
+    }
+
+    stage('Construir Backend y Frontend en Deploy Path') {
+      steps {
+        echo '🚧 Construyendo backend y frontend en directorio de despliegue...'
+
+        // Backend
+        dir("$DEPLOY_PATH/api") {
+          sh 'rm -rf node_modules package-lock.json'
+          sh 'npm install --omit=dev'
+        }
+
+        // Frontend
+        dir("$DEPLOY_PATH") {
+          sh 'rm -rf node_modules package-lock.json build dist'
+          sh 'npm install'
+          sh 'npm run build'
+        }
+      }
+    }
+
+    stage('Reiniciar Backend con PM2') {
+      steps {
+        dir("$DEPLOY_PATH/api") {
+          echo '♻️ Reiniciando backend con PM2...'
+          sh '''
+            pm2 delete api-teatro || true
+            pm2 start index.js --name api-teatro
+          '''
+        }
+      }
+    }
+
+    stage('Ejecutar pruebas E2E Selenium Chromium') {
+      steps {
+        dir("$DEPLOY_PATH/src/tests/e2e-chromium") {
+          echo '📦 Instalando dependencias para pruebas E2E...'
+          sh 'rm -rf node_modules package-lock.json'
+          sh 'npm install selenium-webdriver mocha chai'
+
+          echo '🧪 Ejecutando pruebas E2E Selenium...'
+          script {
+            def e2eCode = sh(
+              script: '''
+                npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=test-results-e2e.xml --timeout 30000 || exit 1
+              ''',
+              returnStatus: true
+            )
+
+            if (e2eCode != 0) {
+              echo '⚠️ Algunas pruebas E2E fallaron.'
+              currentBuild.result = 'UNSTABLE'
+            } else {
+              echo '✅ Todas las pruebas E2E pasaron.'
+            }
+          }
+        }
+      }
+      post {
+        always {
+          junit "$DEPLOY_PATH/src/tests/e2e-chromium/test-results-e2e.xml"
         }
       }
     }
@@ -74,16 +106,16 @@ pipeline {
 
   post {
     success {
-      echo '✅ CI/CD completado exitosamente.'
+      echo '✅ Pipeline finalizado con éxito.'
     }
     unstable {
-      echo '⚠️ CI/CD completado con estado UNSTABLE. Revisa los reportes.'
+      echo '⚠️ Pipeline finalizado con estado UNSTABLE, revisar pruebas E2E.'
     }
     failure {
-      echo '❌ Falló el pipeline. Revisa los errores.'
+      echo '❌ Pipeline falló.'
     }
     always {
-      echo '📦 Pipeline finalizado.'
+      echo '🏁 Pipeline terminado.'
     }
   }
 }
