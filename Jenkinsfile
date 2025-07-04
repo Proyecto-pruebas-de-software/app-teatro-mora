@@ -87,6 +87,26 @@ pipeline {
         }
       }
     }
+
+    stage('Run E2E Tests') {
+      when {
+        branch 'main'
+      }
+      steps {
+        echo '🧪 Ejecutando pruebas E2E con Chromium...'
+        // Esperar a que los servicios estén completamente levantados
+        sh 'sleep 5'
+
+        // Ejecutar pruebas desde la raíz del proyecto
+        sh '''
+          echo "Instalando dependencias E2E si es necesario..."
+          npm install
+
+          echo "Ejecutando pruebas E2E (npm run test:e2e)..."
+          npm run test:e2e
+        '''
+      }
+    }
   }
 
   post {
